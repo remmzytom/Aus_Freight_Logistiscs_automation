@@ -1,0 +1,48 @@
+name: Monthly Freight Logistics Automation
+
+# Run on the 1st of every month at 6 AM UTC
+on:
+  schedule:
+    - cron: '0 6 1 * *'  # Monthly at 6 AM UTC
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  monthly-automation:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+        
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+        pip install jupyter
+        pip install pandas numpy matplotlib plotly streamlit
+        
+    - name: Create data directory
+      run: mkdir -p data
+      
+    - name: Run monthly automation
+      run: |
+        python monthly_automation.py
+        
+    - name: Commit updated data
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add .
+        git commit -m "Monthly automation: $(date)" || exit 0
+        git push
+        
+    - name: Deploy to Streamlit Cloud
+      if: success()
+      run: |
+        echo "Dashboard updated successfully"
+        echo "Streamlit Cloud will automatically redeploy"
+

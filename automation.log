@@ -1,0 +1,732 @@
+2025-10-27 12:08:07,222 - INFO - ============================================================
+2025-10-27 12:08:07,223 - INFO - ============================================================
+2025-10-27 12:22:52,505 - INFO - Simple Freight Logistics Automation Started
+2025-10-27 12:22:52,505 - INFO - Project Directory: C:\Cursor AI_projects\Aus_Freight_Logistic
+2025-10-27 12:22:52,505 - INFO - Starting Freight Logistics Automation
+2025-10-27 12:22:52,506 - INFO - Started at: 2025-10-27 12:22:52
+2025-10-27 12:22:52,506 - INFO - Checking for new data...
+2025-10-27 12:22:52,506 - INFO - No data file found - collection required
+2025-10-27 12:22:52,507 - INFO - Collecting fresh data from ABS website...
+2025-10-27 12:26:25,302 - INFO - Simple Freight Logistics Automation Started
+2025-10-27 12:26:25,303 - INFO - Project Directory: C:\Cursor AI_projects\Aus_Freight_Logistic
+2025-10-27 12:26:25,303 - INFO - Starting Freight Logistics Automation
+2025-10-27 12:26:25,303 - INFO - Started at: 2025-10-27 12:26:25
+2025-10-27 12:26:25,303 - INFO - Checking for new data...
+2025-10-27 12:26:25,303 - INFO - No data file found - collection required
+2025-10-27 12:26:25,303 - INFO - Collecting fresh data from ABS website...
+2025-10-27 12:27:48,470 - INFO - Simple Freight Logistics Automation Started
+2025-10-27 12:27:48,470 - INFO - Project Directory: C:\Cursor AI_projects\Aus_Freight_Logistic
+2025-10-27 12:27:48,471 - INFO - Starting Freight Logistics Automation
+2025-10-27 12:27:48,471 - INFO - Started at: 2025-10-27 12:27:48
+2025-10-27 12:27:48,471 - INFO - Checking for new data...
+2025-10-27 12:27:48,471 - INFO - Data file is 1 days old - using existing data
+2025-10-27 12:27:48,472 - INFO - Running data cleaning...
+2025-10-27 12:27:48,482 - ERROR - Data cleaning error: [WinError 2] The system cannot find the file specified
+2025-10-27 12:27:48,482 - ERROR - Automation failed!
+2025-10-27 13:34:48,302 - INFO - Simple Freight Logistics Automation Started
+2025-10-27 13:34:48,309 - INFO - Project Directory: C:\Cursor AI_projects\Aus_Freight_Logistic
+2025-10-27 13:34:48,309 - INFO - Starting Freight Logistics Automation
+2025-10-27 13:34:48,309 - INFO - Started at: 2025-10-27 13:34:48
+2025-10-27 13:34:48,310 - INFO - Checking for new data...
+2025-10-27 13:34:48,310 - INFO - Data file is 2 days old - using existing data
+2025-10-27 13:34:48,311 - INFO - Running data cleaning...
+2025-10-27 13:34:48,314 - ERROR - Data cleaning error: [WinError 2] The system cannot find the file specified
+2025-10-27 13:34:48,314 - ERROR - Automation failed!
+2025-10-27 13:43:14,981 - INFO - Simple Freight Logistics Automation Started
+2025-10-27 13:43:14,983 - INFO - Project Directory: C:\Cursor AI_projects\Aus_Freight_Logistic
+2025-10-27 13:43:14,983 - INFO - Starting Freight Logistics Automation
+2025-10-27 13:43:14,983 - INFO - Started at: 2025-10-27 13:43:14
+2025-10-27 13:43:14,983 - INFO - Checking for new data...
+2025-10-27 13:43:14,984 - INFO - Data file is 2 days old - using existing data
+2025-10-27 13:43:14,985 - INFO - Running data cleaning...
+2025-10-27 13:47:33,153 - INFO - Data cleaning completed successfully
+2025-10-27 13:47:33,155 - INFO - Running data analysis...
+2025-10-27 13:47:43,468 - ERROR - Data analysis failed: [NbConvertApp] Converting notebook C:\Cursor AI_projects\Aus_Freight_Logistic\data_analysis.ipynb to notebook
+C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\zmq\_future.py:718: RuntimeWarning: Proactor event loop does not implement add_reader family of methods required for zmq. Registering an additional selector thread for add_reader support via tornado. Use `asyncio.set_event_loop_policy(WindowsSelectorEventLoopPolicy())` to avoid this warning.
+  self._get_loop()
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Scripts\jupyter-nbconvert.EXE\__main__.py", line 6, in <module>
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\jupyter_core\application.py", line 284, in launch_instance
+    super().launch_instance(argv=argv, **kwargs)
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\traitlets\config\application.py", line 1075, in launch_instance
+    app.start()
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\nbconvert\nbconvertapp.py", line 420, in start
+    self.convert_notebooks()
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\nbconvert\nbconvertapp.py", line 597, in convert_notebooks
+    self.convert_single_notebook(notebook_filename)
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\nbconvert\nbconvertapp.py", line 563, in convert_single_notebook
+    output, resources = self.export_single_notebook(
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\nbconvert\nbconvertapp.py", line 487, in export_single_notebook
+    output, resources = self.exporter.from_filename(
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\nbconvert\exporters\exporter.py", line 201, in from_filename
+    return self.from_file(f, resources=resources, **kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\nbconvert\exporters\exporter.py", line 220, in from_file
+    return self.from_notebook_node(
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\nbconvert\exporters\notebook.py", line 36, in from_notebook_node
+    nb_copy, resources = super().from_notebook_node(nb, resources, **kw)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\nbconvert\exporters\exporter.py", line 154, in from_notebook_node
+    nb_copy, resources = self._preprocess(nb_copy, resources)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\nbconvert\exporters\exporter.py", line 353, in _preprocess
+    nbc, resc = preprocessor(nbc, resc)
+                ^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\nbconvert\preprocessors\base.py", line 48, in __call__
+    return self.preprocess(nb, resources)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\nbconvert\preprocessors\execute.py", line 103, in preprocess
+    self.preprocess_cell(cell, resources, index)
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\nbconvert\preprocessors\execute.py", line 124, in preprocess_cell
+    cell = self.execute_cell(cell, index, store_history=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\jupyter_core\utils\__init__.py", line 165, in wrapped
+    return loop.run_until_complete(inner)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\asyncio\base_events.py", line 650, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\nbclient\client.py", line 1062, in async_execute_cell
+    await self._check_raise_for_error(cell, cell_index, exec_reply)
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\nbclient\client.py", line 918, in _check_raise_for_error
+    raise CellExecutionError.from_cell_and_msg(cell, exec_reply_content)
+nbclient.exceptions.CellExecutionError: An error occurred while executing the following cell:
+------------------
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from datetime import datetime
+from sklearn.preprocessing import MinMaxScaler
+import warnings
+warnings.filterwarnings('ignore')
+
+plt.style.use('seaborn-v0_8-darkgrid')
+sns.set_palette('husl')
+
+pd.set_option('display.max_columns', None)
+pd.set_option('display.max_rows', 100)
+
+print('\u2705 Libraries loaded successfully!')
+------------------
+
+
+[31m---------------------------------------------------------------------------[39m
+[31mModuleNotFoundError[39m                       Traceback (most recent call last)
+[36mCell[39m[36m [39m[32mIn[1][39m[32m, line 6[39m
+[32m      4[39m [38;5;28;01mimport[39;00m[38;5;250m [39m[34;01mseaborn[39;00m[38;5;250m [39m[38;5;28;01mas[39;00m[38;5;250m [39m[34;01msns[39;00m
+[32m      5[39m [38;5;28;01mfrom[39;00m[38;5;250m [39m[34;01mdatetime[39;00m[38;5;250m [39m[38;5;28;01mimport[39;00m datetime
+[32m----> [39m[32m6[39m [38;5;28;01mfrom[39;00m[38;5;250m [39m[34;01msklearn[39;00m[34;01m.[39;00m[34;01mpreprocessing[39;00m[38;5;250m [39m[38;5;28;01mimport[39;00m MinMaxScaler
+[32m      7[39m [38;5;28;01mimport[39;00m[38;5;250m [39m[34;01mwarnings[39;00m
+[32m      8[39m warnings.filterwarnings([33m'[39m[33mignore[39m[33m'[39m)
+
+[31mModuleNotFoundError[39m: No module named 'sklearn'
+
+
+2025-10-27 13:47:43,469 - ERROR - Automation failed!
+2025-10-27 13:57:15,057 - INFO - Simple Freight Logistics Automation Started
+2025-10-27 13:57:15,057 - INFO - Project Directory: C:\Cursor AI_projects\Aus_Freight_Logistic
+2025-10-27 13:57:15,057 - INFO - Starting Freight Logistics Automation
+2025-10-27 13:57:15,057 - INFO - Started at: 2025-10-27 13:57:15
+2025-10-27 13:57:15,057 - INFO - Checking for new data...
+2025-10-27 13:57:15,059 - INFO - Data file is 2 days old - using existing data
+2025-10-27 13:57:15,059 - INFO - Running data cleaning...
+2025-10-27 13:59:03,994 - INFO - Data cleaning completed successfully
+2025-10-27 13:59:03,994 - INFO - Running data analysis...
+2025-10-27 13:59:09,373 - ERROR - Data analysis failed: [NbConvertApp] Converting notebook C:\Cursor AI_projects\Aus_Freight_Logistic\data_analysis.ipynb to notebook
+C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\zmq\_future.py:718: RuntimeWarning: Proactor event loop does not implement add_reader family of methods required for zmq. Registering an additional selector thread for add_reader support via tornado. Use `asyncio.set_event_loop_policy(WindowsSelectorEventLoopPolicy())` to avoid this warning.
+  self._get_loop()
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Scripts\jupyter-nbconvert.EXE\__main__.py", line 6, in <module>
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\jupyter_core\application.py", line 284, in launch_instance
+    super().launch_instance(argv=argv, **kwargs)
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\traitlets\config\application.py", line 1075, in launch_instance
+    app.start()
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\nbconvert\nbconvertapp.py", line 420, in start
+    self.convert_notebooks()
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\nbconvert\nbconvertapp.py", line 597, in convert_notebooks
+    self.convert_single_notebook(notebook_filename)
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\nbconvert\nbconvertapp.py", line 563, in convert_single_notebook
+    output, resources = self.export_single_notebook(
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\nbconvert\nbconvertapp.py", line 487, in export_single_notebook
+    output, resources = self.exporter.from_filename(
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\nbconvert\exporters\exporter.py", line 201, in from_filename
+    return self.from_file(f, resources=resources, **kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\nbconvert\exporters\exporter.py", line 220, in from_file
+    return self.from_notebook_node(
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\nbconvert\exporters\notebook.py", line 36, in from_notebook_node
+    nb_copy, resources = super().from_notebook_node(nb, resources, **kw)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\nbconvert\exporters\exporter.py", line 154, in from_notebook_node
+    nb_copy, resources = self._preprocess(nb_copy, resources)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\nbconvert\exporters\exporter.py", line 353, in _preprocess
+    nbc, resc = preprocessor(nbc, resc)
+                ^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\nbconvert\preprocessors\base.py", line 48, in __call__
+    return self.preprocess(nb, resources)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\nbconvert\preprocessors\execute.py", line 103, in preprocess
+    self.preprocess_cell(cell, resources, index)
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\nbconvert\preprocessors\execute.py", line 124, in preprocess_cell
+    cell = self.execute_cell(cell, index, store_history=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\jupyter_core\utils\__init__.py", line 165, in wrapped
+    return loop.run_until_complete(inner)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\asyncio\base_events.py", line 650, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\nbclient\client.py", line 1062, in async_execute_cell
+    await self._check_raise_for_error(cell, cell_index, exec_reply)
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\nbclient\client.py", line 918, in _check_raise_for_error
+    raise CellExecutionError.from_cell_and_msg(cell, exec_reply_content)
+nbclient.exceptions.CellExecutionError: An error occurred while executing the following cell:
+------------------
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from datetime import datetime
+from sklearn.preprocessing import MinMaxScaler
+import warnings
+warnings.filterwarnings('ignore')
+pip install scikit-learn
+
+plt.style.use('seaborn-v0_8-darkgrid')
+sns.set_palette('husl')
+
+pd.set_option('display.max_columns', None)
+pd.set_option('display.max_rows', 100)
+
+print('\u2705 Libraries loaded successfully!')
+------------------
+
+
+  [36mCell[39m[36m [39m[32mIn[1][39m[32m, line 9[39m
+[31m    [39m[31mpip install scikit-learn[39m
+        ^
+[31mSyntaxError[39m[31m:[39m invalid syntax
+
+
+
+2025-10-27 13:59:09,375 - ERROR - Automation failed!
+2025-10-27 14:00:15,841 - INFO - Simple Freight Logistics Automation Started
+2025-10-27 14:00:15,841 - INFO - Project Directory: C:\Cursor AI_projects\Aus_Freight_Logistic
+2025-10-27 14:00:15,841 - INFO - Starting Freight Logistics Automation
+2025-10-27 14:00:15,843 - INFO - Started at: 2025-10-27 14:00:15
+2025-10-27 14:00:15,843 - INFO - Checking for new data...
+2025-10-27 14:00:15,843 - INFO - Data file is 2 days old - using existing data
+2025-10-27 14:00:15,843 - INFO - Running data cleaning...
+2025-10-27 14:01:56,007 - INFO - Data cleaning completed successfully
+2025-10-27 14:01:56,007 - INFO - Running data analysis...
+2025-10-27 14:04:30,822 - INFO - Data analysis completed successfully
+2025-10-27 14:04:30,822 - INFO - Updating dashboard...
+2025-10-27 14:04:30,822 - INFO - Dashboard updated successfully
+2025-10-27 14:04:30,822 - INFO - Dashboard available at: http://localhost:8501
+2025-10-27 14:04:30,822 - INFO - Automation completed successfully!
+2025-10-27 14:04:30,822 - INFO - Duration: 0:04:14.979094
+2025-10-27 15:23:25,447 - INFO - Simple Freight Logistics Automation Started
+2025-10-27 15:23:25,447 - INFO - Project Directory: C:\Cursor AI_projects\Aus_Freight_Logistic
+2025-10-27 15:23:25,447 - INFO - Starting Freight Logistics Automation
+2025-10-27 15:23:25,447 - INFO - Started at: 2025-10-27 15:23:25
+2025-10-27 15:23:25,447 - INFO - Checking for new data...
+2025-10-27 15:23:25,447 - INFO - Data file is 2 days old - using existing data
+2025-10-27 15:23:25,447 - INFO - Running data cleaning...
+2025-10-27 15:25:17,128 - INFO - Data cleaning completed successfully
+2025-10-27 15:25:17,128 - INFO - Running data analysis...
+2025-10-27 15:27:42,516 - INFO - Data analysis completed successfully
+2025-10-27 15:27:42,516 - INFO - Updating dashboard...
+2025-10-27 15:27:42,516 - INFO - Dashboard updated successfully
+2025-10-27 15:27:42,516 - INFO - Dashboard available at: http://localhost:8501
+2025-10-27 15:27:42,516 - INFO - Automation completed successfully!
+2025-10-27 15:27:42,516 - INFO - Duration: 0:04:17.068774
+2025-10-27 15:27:42,516 - INFO - Email not configured - skipping notification
+2025-10-27 15:27:42,516 - INFO - Success notification sent
+2025-10-27 15:34:30,228 - INFO - Simple Freight Logistics Automation Started
+2025-10-27 15:34:30,228 - INFO - Project Directory: C:\Cursor AI_projects\Aus_Freight_Logistic
+2025-10-27 15:34:30,228 - INFO - Starting Freight Logistics Automation
+2025-10-27 15:34:30,228 - INFO - Started at: 2025-10-27 15:34:30
+2025-10-27 15:34:30,228 - INFO - Checking for new data...
+2025-10-27 15:34:30,228 - INFO - Data file is 2 days old - using existing data
+2025-10-27 15:34:30,228 - INFO - Running data cleaning...
+2025-10-27 15:36:12,993 - INFO - Data cleaning completed successfully
+2025-10-27 15:36:12,993 - INFO - Running data analysis...
+2025-10-27 15:38:40,762 - INFO - Data analysis completed successfully
+2025-10-27 15:38:40,771 - INFO - Updating dashboard...
+2025-10-27 15:38:40,783 - INFO - Dashboard updated successfully
+2025-10-27 15:38:40,792 - INFO - Dashboard available at: http://localhost:8501
+2025-10-27 15:38:40,798 - INFO - Automation completed successfully!
+2025-10-27 15:38:40,800 - INFO - Duration: 0:04:10.569766
+2025-10-27 15:38:49,540 - INFO - Success notification sent
+2025-10-27 15:44:05,953 - INFO - Simple Freight Logistics Automation Started
+2025-10-27 15:44:05,953 - INFO - Project Directory: C:\Cursor AI_projects\Aus_Freight_Logistic
+2025-10-27 15:44:05,954 - INFO - Starting Freight Logistics Automation
+2025-10-27 15:44:05,954 - INFO - Started at: 2025-10-27 15:44:05
+2025-10-27 15:44:05,954 - INFO - Checking for new data...
+2025-10-27 15:44:05,954 - INFO - Data file is 2 days old - using existing data
+2025-10-27 15:44:05,954 - INFO - Running data cleaning...
+2025-10-27 15:46:17,674 - INFO - Data cleaning completed successfully
+2025-10-27 15:46:17,674 - INFO - Running data analysis...
+2025-10-27 15:49:13,915 - INFO - Data analysis completed successfully
+2025-10-27 15:49:13,915 - INFO - Updating dashboard...
+2025-10-27 15:49:13,916 - INFO - Dashboard updated successfully
+2025-10-27 15:49:13,916 - INFO - Dashboard available at: http://localhost:8501
+2025-10-27 15:49:13,916 - INFO - Automation completed successfully!
+2025-10-27 15:49:13,916 - INFO - Duration: 0:05:07.962506
+2025-10-27 15:49:22,300 - INFO - Email sent successfully: Freight Logistics Automation - SUCCESS
+2025-10-27 15:49:22,300 - INFO - Success notification sent
+2025-10-28 11:12:16,382 - INFO - Simple Freight Logistics Automation Started
+2025-10-28 11:12:16,383 - INFO - Project Directory: C:\Cursor AI_projects\Aus_Freight_Logistic
+2025-10-28 11:12:16,384 - INFO - Starting Freight Logistics Automation
+2025-10-28 11:12:16,384 - INFO - Started at: 2025-10-28 11:12:16
+2025-10-28 11:12:16,385 - INFO - Checking for new data...
+2025-10-28 11:12:16,385 - INFO - Data file is 2 days old - using existing data
+2025-10-28 11:12:16,386 - INFO - Running data cleaning...
+2025-10-28 11:15:36,791 - INFO - Simple Freight Logistics Automation Started
+2025-10-28 11:15:36,792 - INFO - Project Directory: C:\Cursor AI_projects\Aus_Freight_Logistic
+2025-10-28 11:15:36,792 - INFO - Starting Freight Logistics Automation
+2025-10-28 11:15:36,793 - INFO - Started at: 2025-10-28 11:15:36
+2025-10-28 11:15:36,793 - INFO - Force fresh data download - running extractor...
+2025-10-28 11:15:36,793 - INFO - Collecting fresh data from ABS website...
+2025-10-28 11:30:50,363 - INFO - Simple Freight Logistics Automation Started
+2025-10-28 11:30:50,364 - INFO - Project Directory: C:\Cursor AI_projects\Aus_Freight_Logistic
+2025-10-28 11:30:50,364 - INFO - Starting Freight Logistics Automation
+2025-10-28 11:30:50,365 - INFO - Started at: 2025-10-28 11:30:50
+2025-10-28 11:30:50,365 - INFO - Force fresh data download - running extractor...
+2025-10-28 11:30:50,365 - INFO - Collecting fresh data from ABS website...
+2025-10-28 11:33:25,531 - INFO - Simple Freight Logistics Automation Started
+2025-10-28 11:33:25,531 - INFO - Project Directory: C:\Cursor AI_projects\Aus_Freight_Logistic
+2025-10-28 11:33:25,531 - INFO - Starting Freight Logistics Automation
+2025-10-28 11:33:25,531 - INFO - Started at: 2025-10-28 11:33:25
+2025-10-28 11:33:25,531 - INFO - Force fresh data download - running extractor...
+2025-10-28 11:33:25,531 - INFO - Collecting fresh data from ABS website...
+2025-10-28 11:34:16,680 - INFO - Data collection completed successfully
+2025-10-28 11:34:16,680 - INFO - Running data cleaning...
+2025-10-28 11:34:50,534 - ERROR - Data cleaning failed: [NbConvertApp] Converting notebook C:\Cursor AI_projects\Aus_Freight_Logistic\data_cleaning.ipynb to notebook
+C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\zmq\_future.py:718: RuntimeWarning: Proactor event loop does not implement add_reader family of methods required for zmq. Registering an additional selector thread for add_reader support via tornado. Use `asyncio.set_event_loop_policy(WindowsSelectorEventLoopPolicy())` to avoid this warning.
+  self._get_loop()
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Scripts\jupyter-nbconvert.EXE\__main__.py", line 6, in <module>
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\jupyter_core\application.py", line 284, in launch_instance
+    super().launch_instance(argv=argv, **kwargs)
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\traitlets\config\application.py", line 1075, in launch_instance
+    app.start()
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\nbconvert\nbconvertapp.py", line 420, in start
+    self.convert_notebooks()
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\nbconvert\nbconvertapp.py", line 597, in convert_notebooks
+    self.convert_single_notebook(notebook_filename)
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\nbconvert\nbconvertapp.py", line 563, in convert_single_notebook
+    output, resources = self.export_single_notebook(
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\nbconvert\nbconvertapp.py", line 487, in export_single_notebook
+    output, resources = self.exporter.from_filename(
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\nbconvert\exporters\exporter.py", line 201, in from_filename
+    return self.from_file(f, resources=resources, **kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\nbconvert\exporters\exporter.py", line 220, in from_file
+    return self.from_notebook_node(
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\nbconvert\exporters\notebook.py", line 36, in from_notebook_node
+    nb_copy, resources = super().from_notebook_node(nb, resources, **kw)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\nbconvert\exporters\exporter.py", line 154, in from_notebook_node
+    nb_copy, resources = self._preprocess(nb_copy, resources)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\nbconvert\exporters\exporter.py", line 353, in _preprocess
+    nbc, resc = preprocessor(nbc, resc)
+                ^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\nbconvert\preprocessors\base.py", line 48, in __call__
+    return self.preprocess(nb, resources)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\nbconvert\preprocessors\execute.py", line 103, in preprocess
+    self.preprocess_cell(cell, resources, index)
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\nbconvert\preprocessors\execute.py", line 124, in preprocess_cell
+    cell = self.execute_cell(cell, index, store_history=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\jupyter_core\utils\__init__.py", line 165, in wrapped
+    return loop.run_until_complete(inner)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\asyncio\base_events.py", line 650, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\nbclient\client.py", line 1062, in async_execute_cell
+    await self._check_raise_for_error(cell, cell_index, exec_reply)
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\nbclient\client.py", line 918, in _check_raise_for_error
+    raise CellExecutionError.from_cell_and_msg(cell, exec_reply_content)
+nbclient.exceptions.CellExecutionError: An error occurred while executing the following cell:
+------------------
+# Save the cleaned dataset with SITC and country mappings
+import os
+
+output_file = 'Aus_Freight_Logistic/exports_cleaned.csv'
+df.to_csv(output_file, index=False)
+
+print(f" Cleaned data saved to: {output_file}")
+print(f"Final dataset shape: {df.shape}")
+print(f"File size: {os.path.getsize(output_file) / 1024**2:.2f} MB")
+
+# Final Summary
+print(f"\n DATA CLEANING COMPLETED WITH MAPPINGS!")
+print("=" * 50)
+print(f" Records: {len(df):,}")
+print(f" Countries: {df['country_of_destination'].nunique()}")
+print(f" Products: {df['product_description'].nunique()}")
+print(f" Total Value: AUD ${df['value_fob_aud'].sum():,.2f}")
+print(f"Total Weight: {df['gross_weight_tonnes'].sum():,.2f} tonnes")
+
+
+------------------
+
+
+[31m---------------------------------------------------------------------------[39m
+[31mOSError[39m                                   Traceback (most recent call last)
+[36mCell[39m[36m [39m[32mIn[21][39m[32m, line 5[39m
+[32m      2[39m [38;5;28;01mimport[39;00m[38;5;250m [39m[34;01mos[39;00m
+[32m      4[39m output_file = [33m'[39m[33mAus_Freight_Logistic/exports_cleaned.csv[39m[33m'[39m
+[32m----> [39m[32m5[39m [43mdf[49m[43m.[49m[43mto_csv[49m[43m([49m[43moutput_file[49m[43m,[49m[43m [49m[43mindex[49m[43m=[49m[38;5;28;43;01mFalse[39;49;00m[43m)[49m
+[32m      7[39m [38;5;28mprint[39m([33mf[39m[33m"[39m[33m Cleaned data saved to: [39m[38;5;132;01m{[39;00moutput_file[38;5;132;01m}[39;00m[33m"[39m)
+[32m      8[39m [38;5;28mprint[39m([33mf[39m[33m"[39m[33mFinal dataset shape: [39m[38;5;132;01m{[39;00mdf.shape[38;5;132;01m}[39;00m[33m"[39m)
+
+[36mFile [39m[32m~\AppData\Local\Programs\Python\Python311\Lib\site-packages\pandas\util\_decorators.py:333[39m, in [36mdeprecate_nonkeyword_arguments.<locals>.decorate.<locals>.wrapper[39m[34m(*args, **kwargs)[39m
+[32m    327[39m [38;5;28;01mif[39;00m [38;5;28mlen[39m(args) > num_allow_args:
+[32m    328[39m     warnings.warn(
+[32m    329[39m         msg.format(arguments=_format_argument_list(allow_args)),
+[32m    330[39m         [38;5;167;01mFutureWarning[39;00m,
+[32m    331[39m         stacklevel=find_stack_level(),
+[32m    332[39m     )
+[32m--> [39m[32m333[39m [38;5;28;01mreturn[39;00m [43mfunc[49m[43m([49m[43m*[49m[43margs[49m[43m,[49m[43m [49m[43m*[49m[43m*[49m[43mkwargs[49m[43m)[49m
+
+[36mFile [39m[32m~\AppData\Local\Programs\Python\Python311\Lib\site-packages\pandas\core\generic.py:3989[39m, in [36mNDFrame.to_csv[39m[34m(self, path_or_buf, sep, na_rep, float_format, columns, header, index, index_label, mode, encoding, compression, quoting, quotechar, lineterminator, chunksize, date_format, doublequote, escapechar, decimal, errors, storage_options)[39m
+[32m   3978[39m df = [38;5;28mself[39m [38;5;28;01mif[39;00m [38;5;28misinstance[39m([38;5;28mself[39m, ABCDataFrame) [38;5;28;01melse[39;00m [38;5;28mself[39m.to_frame()
+[32m   3980[39m formatter = DataFrameFormatter(
+[32m   3981[39m     frame=df,
+[32m   3982[39m     header=header,
+[32m   (...)[39m[32m   3986[39m     decimal=decimal,
+[32m   3987[39m )
+[32m-> [39m[32m3989[39m [38;5;28;01mreturn[39;00m [43mDataFrameRenderer[49m[43m([49m[43mformatter[49m[43m)[49m[43m.[49m[43mto_csv[49m[43m([49m
+[32m   3990[39m [43m    [49m[43mpath_or_buf[49m[43m,[49m
+[32m   3991[39m [43m    [49m[43mlineterminator[49m[43m=[49m[43mlineterminator[49m[43m,[49m
+[32m   3992[39m [43m    [49m[43msep[49m[43m=[49m[43msep[49m[43m,[49m
+[32m   3993[39m [43m    [49m[43mencoding[49m[43m=[49m[43mencoding[49m[43m,[49m
+[32m   3994[39m [43m    [49m[43merrors[49m[43m=[49m[43merrors[49m[43m,[49m
+[32m   3995[39m [43m    [49m[43mcompression[49m[43m=[49m[43mcompression[49m[43m,[49m
+[32m   3996[39m [43m    [49m[43mquoting[49m[43m=[49m[43mquoting[49m[43m,[49m
+[32m   3997[39m [43m    [49m[43mcolumns[49m[43m=[49m[43mcolumns[49m[43m,[49m
+[32m   3998[39m [43m    [49m[43mindex_label[49m[43m=[49m[43mindex_label[49m[43m,[49m
+[32m   3999[39m [43m    [49m[43mmode[49m[43m=[49m[43mmode[49m[43m,[49m
+[32m   4000[39m [43m    [49m[43mchunksize[49m[43m=[49m[43mchunksize[49m[43m,[49m
+[32m   4001[39m [43m    [49m[43mquotechar[49m[43m=[49m[43mquotechar[49m[43m,[49m
+[32m   4002[39m [43m    [49m[43mdate_format[49m[43m=[49m[43mdate_format[49m[43m,[49m
+[32m   4003[39m [43m    [49m[43mdoublequote[49m[43m=[49m[43mdoublequote[49m[43m,[49m
+[32m   4004[39m [43m    [49m[43mescapechar[49m[43m=[49m[43mescapechar[49m[43m,[49m
+[32m   4005[39m [43m    [49m[43mstorage_options[49m[43m=[49m[43mstorage_options[49m[43m,[49m
+[32m   4006[39m [43m[49m[43m)[49m
+
+[36mFile [39m[32m~\AppData\Local\Programs\Python\Python311\Lib\site-packages\pandas\io\formats\format.py:1014[39m, in [36mDataFrameRenderer.to_csv[39m[34m(self, path_or_buf, encoding, sep, columns, index_label, mode, compression, quoting, quotechar, lineterminator, chunksize, date_format, doublequote, escapechar, errors, storage_options)[39m
+[32m    993[39m     created_buffer = [38;5;28;01mFalse[39;00m
+[32m    995[39m csv_formatter = CSVFormatter(
+[32m    996[39m     path_or_buf=path_or_buf,
+[32m    997[39m     lineterminator=lineterminator,
+[32m   (...)[39m[32m   1012[39m     formatter=[38;5;28mself[39m.fmt,
+[32m   1013[39m )
+[32m-> [39m[32m1014[39m [43mcsv_formatter[49m[43m.[49m[43msave[49m[43m([49m[43m)[49m
+[32m   1016[39m [38;5;28;01mif[39;00m created_buffer:
+[32m   1017[39m     [38;5;28;01massert[39;00m [38;5;28misinstance[39m(path_or_buf, StringIO)
+
+[36mFile [39m[32m~\AppData\Local\Programs\Python\Python311\Lib\site-packages\pandas\io\formats\csvs.py:251[39m, in [36mCSVFormatter.save[39m[34m(self)[39m
+[32m    247[39m [38;5;250m[39m[33;03m"""[39;00m
+[32m    248[39m [33;03mCreate the writer & save.[39;00m
+[32m    249[39m [33;03m"""[39;00m
+[32m    250[39m [38;5;66;03m# apply compression and byte/text conversion[39;00m
+[32m--> [39m[32m251[39m [38;5;28;01mwith[39;00m [43mget_handle[49m[43m([49m
+[32m    252[39m [43m    [49m[38;5;28;43mself[39;49m[43m.[49m[43mfilepath_or_buffer[49m[43m,[49m
+[32m    253[39m [43m    [49m[38;5;28;43mself[39;49m[43m.[49m[43mmode[49m[43m,[49m
+[32m    254[39m [43m    [49m[43mencoding[49m[43m=[49m[38;5;28;43mself[39;49m[43m.[49m[43mencoding[49m[43m,[49m
+[32m    255[39m [43m    [49m[43merrors[49m[43m=[49m[38;5;28;43mself[39;49m[43m.[49m[43merrors[49m[43m,[49m
+[32m    256[39m [43m    [49m[43mcompression[49m[43m=[49m[38;5;28;43mself[39;49m[43m.[49m[43mcompression[49m[43m,[49m
+[32m    257[39m [43m    [49m[43mstorage_options[49m[43m=[49m[38;5;28;43mself[39;49m[43m.[49m[43mstorage_options[49m[43m,[49m
+[32m    258[39m [43m[49m[43m)[49m [38;5;28;01mas[39;00m handles:
+[32m    259[39m     [38;5;66;03m# Note: self.encoding is irrelevant here[39;00m
+[32m    260[39m     [38;5;28mself[39m.writer = csvlib.writer(
+[32m    261[39m         handles.handle,
+[32m    262[39m         lineterminator=[38;5;28mself[39m.lineterminator,
+[32m   (...)[39m[32m    267[39m         quotechar=[38;5;28mself[39m.quotechar,
+[32m    268[39m     )
+[32m    270[39m     [38;5;28mself[39m._save()
+
+[36mFile [39m[32m~\AppData\Local\Programs\Python\Python311\Lib\site-packages\pandas\io\common.py:749[39m, in [36mget_handle[39m[34m(path_or_buf, mode, encoding, compression, memory_map, is_text, errors, storage_options)[39m
+[32m    747[39m [38;5;66;03m# Only for write methods[39;00m
+[32m    748[39m [38;5;28;01mif[39;00m [33m"[39m[33mr[39m[33m"[39m [38;5;129;01mnot[39;00m [38;5;129;01min[39;00m mode [38;5;129;01mand[39;00m is_path:
+[32m--> [39m[32m749[39m     [43mcheck_parent_directory[49m[43m([49m[38;5;28;43mstr[39;49m[43m([49m[43mhandle[49m[43m)[49m[43m)[49m
+[32m    751[39m [38;5;28;01mif[39;00m compression:
+[32m    752[39m     [38;5;28;01mif[39;00m compression != [33m"[39m[33mzstd[39m[33m"[39m:
+[32m    753[39m         [38;5;66;03m# compression libraries do not like an explicit text-mode[39;00m
+
+[36mFile [39m[32m~\AppData\Local\Programs\Python\Python311\Lib\site-packages\pandas\io\common.py:616[39m, in [36mcheck_parent_directory[39m[34m(path)[39m
+[32m    614[39m parent = Path(path).parent
+[32m    615[39m [38;5;28;01mif[39;00m [38;5;129;01mnot[39;00m parent.is_dir():
+[32m--> [39m[32m616[39m     [38;5;28;01mraise[39;00m [38;5;167;01mOSError[39;00m([33mrf[39m[33m"[39m[33mCannot save file into a non-existent directory: [39m[33m'[39m[38;5;132;01m{[39;00mparent[38;5;132;01m}[39;00m[33m'[39m[33m"[39m)
+
+[31mOSError[39m: Cannot save file into a non-existent directory: 'Aus_Freight_Logistic'
+
+
+2025-10-28 11:34:50,534 - ERROR - Automation failed!
+2025-10-28 11:34:55,214 - INFO - Email sent successfully: Freight Logistics Automation - FAILED
+2025-10-28 11:34:55,214 - ERROR - Failure notification sent
+2025-10-28 11:40:19,275 - INFO - Simple Freight Logistics Automation Started
+2025-10-28 11:40:19,277 - INFO - Project Directory: C:\Cursor AI_projects\Aus_Freight_Logistic
+2025-10-28 11:40:19,279 - INFO - Starting Freight Logistics Automation
+2025-10-28 11:40:19,281 - INFO - Started at: 2025-10-28 11:40:19
+2025-10-28 11:40:19,290 - INFO - Force fresh data download - running extractor...
+2025-10-28 11:40:19,295 - INFO - Collecting fresh data from ABS website...
+2025-10-28 11:42:42,475 - INFO - Simple Freight Logistics Automation Started
+2025-10-28 11:42:42,475 - INFO - Project Directory: C:\Cursor AI_projects\Aus_Freight_Logistic
+2025-10-28 11:42:42,477 - INFO - Starting Freight Logistics Automation
+2025-10-28 11:42:42,477 - INFO - Started at: 2025-10-28 11:42:42
+2025-10-28 11:42:42,478 - INFO - Force fresh data download - running extractor...
+2025-10-28 11:42:42,478 - INFO - Collecting fresh data from ABS website...
+2025-10-28 11:45:58,887 - INFO - Simple Freight Logistics Automation Started
+2025-10-28 11:45:58,887 - INFO - Project Directory: C:\Cursor AI_projects\Aus_Freight_Logistic
+2025-10-28 11:45:58,887 - INFO - Starting Freight Logistics Automation
+2025-10-28 11:45:58,887 - INFO - Started at: 2025-10-28 11:45:58
+2025-10-28 11:45:58,887 - INFO - Force fresh data download - running extractor...
+2025-10-28 11:45:58,887 - INFO - Collecting fresh data from ABS website...
+2025-10-28 11:46:26,433 - INFO - Data collection completed successfully
+2025-10-28 11:46:26,434 - INFO - Running data cleaning...
+2025-10-28 11:46:43,271 - ERROR - Data cleaning failed: [NbConvertApp] Converting notebook C:\Cursor AI_projects\Aus_Freight_Logistic\data_cleaning.ipynb to notebook
+C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\zmq\_future.py:718: RuntimeWarning: Proactor event loop does not implement add_reader family of methods required for zmq. Registering an additional selector thread for add_reader support via tornado. Use `asyncio.set_event_loop_policy(WindowsSelectorEventLoopPolicy())` to avoid this warning.
+  self._get_loop()
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Scripts\jupyter-nbconvert.EXE\__main__.py", line 6, in <module>
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\jupyter_core\application.py", line 284, in launch_instance
+    super().launch_instance(argv=argv, **kwargs)
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\traitlets\config\application.py", line 1075, in launch_instance
+    app.start()
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\nbconvert\nbconvertapp.py", line 420, in start
+    self.convert_notebooks()
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\nbconvert\nbconvertapp.py", line 597, in convert_notebooks
+    self.convert_single_notebook(notebook_filename)
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\nbconvert\nbconvertapp.py", line 563, in convert_single_notebook
+    output, resources = self.export_single_notebook(
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\nbconvert\nbconvertapp.py", line 487, in export_single_notebook
+    output, resources = self.exporter.from_filename(
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\nbconvert\exporters\exporter.py", line 201, in from_filename
+    return self.from_file(f, resources=resources, **kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\nbconvert\exporters\exporter.py", line 220, in from_file
+    return self.from_notebook_node(
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\nbconvert\exporters\notebook.py", line 36, in from_notebook_node
+    nb_copy, resources = super().from_notebook_node(nb, resources, **kw)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\nbconvert\exporters\exporter.py", line 154, in from_notebook_node
+    nb_copy, resources = self._preprocess(nb_copy, resources)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\nbconvert\exporters\exporter.py", line 353, in _preprocess
+    nbc, resc = preprocessor(nbc, resc)
+                ^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\nbconvert\preprocessors\base.py", line 48, in __call__
+    return self.preprocess(nb, resources)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\nbconvert\preprocessors\execute.py", line 103, in preprocess
+    self.preprocess_cell(cell, resources, index)
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\nbconvert\preprocessors\execute.py", line 124, in preprocess_cell
+    cell = self.execute_cell(cell, index, store_history=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\jupyter_core\utils\__init__.py", line 165, in wrapped
+    return loop.run_until_complete(inner)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\asyncio\base_events.py", line 650, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\nbclient\client.py", line 1062, in async_execute_cell
+    await self._check_raise_for_error(cell, cell_index, exec_reply)
+  File "C:\Users\remmz\AppData\Local\Programs\Python\Python311\Lib\site-packages\nbclient\client.py", line 918, in _check_raise_for_error
+    raise CellExecutionError.from_cell_and_msg(cell, exec_reply_content)
+nbclient.exceptions.CellExecutionError: An error occurred while executing the following cell:
+------------------
+# Save the cleaned dataset with SITC and country mappings
+import os
+
+output_file = 'Aus_Freight_Logistic/exports_cleaned.csv'
+df.to_csv(output_file, index=False)
+
+print(f" Cleaned data saved to: {output_file}")
+print(f"Final dataset shape: {df.shape}")
+print(f"File size: {os.path.getsize(output_file) / 1024**2:.2f} MB")
+
+# Final Summary
+print(f"\n DATA CLEANING COMPLETED WITH MAPPINGS!")
+print("=" * 50)
+print(f" Records: {len(df):,}")
+print(f" Countries: {df['country_of_destination'].nunique()}")
+print(f" Products: {df['product_description'].nunique()}")
+print(f" Total Value: AUD ${df['value_fob_aud'].sum():,.2f}")
+print(f"Total Weight: {df['gross_weight_tonnes'].sum():,.2f} tonnes")
+
+
+------------------
+
+
+[31m---------------------------------------------------------------------------[39m
+[31mOSError[39m                                   Traceback (most recent call last)
+[36mCell[39m[36m [39m[32mIn[21][39m[32m, line 5[39m
+[32m      2[39m [38;5;28;01mimport[39;00m[38;5;250m [39m[34;01mos[39;00m
+[32m      4[39m output_file = [33m'[39m[33mAus_Freight_Logistic/exports_cleaned.csv[39m[33m'[39m
+[32m----> [39m[32m5[39m [43mdf[49m[43m.[49m[43mto_csv[49m[43m([49m[43moutput_file[49m[43m,[49m[43m [49m[43mindex[49m[43m=[49m[38;5;28;43;01mFalse[39;49;00m[43m)[49m
+[32m      7[39m [38;5;28mprint[39m([33mf[39m[33m"[39m[33m Cleaned data saved to: [39m[38;5;132;01m{[39;00moutput_file[38;5;132;01m}[39;00m[33m"[39m)
+[32m      8[39m [38;5;28mprint[39m([33mf[39m[33m"[39m[33mFinal dataset shape: [39m[38;5;132;01m{[39;00mdf.shape[38;5;132;01m}[39;00m[33m"[39m)
+
+[36mFile [39m[32m~\AppData\Local\Programs\Python\Python311\Lib\site-packages\pandas\util\_decorators.py:333[39m, in [36mdeprecate_nonkeyword_arguments.<locals>.decorate.<locals>.wrapper[39m[34m(*args, **kwargs)[39m
+[32m    327[39m [38;5;28;01mif[39;00m [38;5;28mlen[39m(args) > num_allow_args:
+[32m    328[39m     warnings.warn(
+[32m    329[39m         msg.format(arguments=_format_argument_list(allow_args)),
+[32m    330[39m         [38;5;167;01mFutureWarning[39;00m,
+[32m    331[39m         stacklevel=find_stack_level(),
+[32m    332[39m     )
+[32m--> [39m[32m333[39m [38;5;28;01mreturn[39;00m [43mfunc[49m[43m([49m[43m*[49m[43margs[49m[43m,[49m[43m [49m[43m*[49m[43m*[49m[43mkwargs[49m[43m)[49m
+
+[36mFile [39m[32m~\AppData\Local\Programs\Python\Python311\Lib\site-packages\pandas\core\generic.py:3989[39m, in [36mNDFrame.to_csv[39m[34m(self, path_or_buf, sep, na_rep, float_format, columns, header, index, index_label, mode, encoding, compression, quoting, quotechar, lineterminator, chunksize, date_format, doublequote, escapechar, decimal, errors, storage_options)[39m
+[32m   3978[39m df = [38;5;28mself[39m [38;5;28;01mif[39;00m [38;5;28misinstance[39m([38;5;28mself[39m, ABCDataFrame) [38;5;28;01melse[39;00m [38;5;28mself[39m.to_frame()
+[32m   3980[39m formatter = DataFrameFormatter(
+[32m   3981[39m     frame=df,
+[32m   3982[39m     header=header,
+[32m   (...)[39m[32m   3986[39m     decimal=decimal,
+[32m   3987[39m )
+[32m-> [39m[32m3989[39m [38;5;28;01mreturn[39;00m [43mDataFrameRenderer[49m[43m([49m[43mformatter[49m[43m)[49m[43m.[49m[43mto_csv[49m[43m([49m
+[32m   3990[39m [43m    [49m[43mpath_or_buf[49m[43m,[49m
+[32m   3991[39m [43m    [49m[43mlineterminator[49m[43m=[49m[43mlineterminator[49m[43m,[49m
+[32m   3992[39m [43m    [49m[43msep[49m[43m=[49m[43msep[49m[43m,[49m
+[32m   3993[39m [43m    [49m[43mencoding[49m[43m=[49m[43mencoding[49m[43m,[49m
+[32m   3994[39m [43m    [49m[43merrors[49m[43m=[49m[43merrors[49m[43m,[49m
+[32m   3995[39m [43m    [49m[43mcompression[49m[43m=[49m[43mcompression[49m[43m,[49m
+[32m   3996[39m [43m    [49m[43mquoting[49m[43m=[49m[43mquoting[49m[43m,[49m
+[32m   3997[39m [43m    [49m[43mcolumns[49m[43m=[49m[43mcolumns[49m[43m,[49m
+[32m   3998[39m [43m    [49m[43mindex_label[49m[43m=[49m[43mindex_label[49m[43m,[49m
+[32m   3999[39m [43m    [49m[43mmode[49m[43m=[49m[43mmode[49m[43m,[49m
+[32m   4000[39m [43m    [49m[43mchunksize[49m[43m=[49m[43mchunksize[49m[43m,[49m
+[32m   4001[39m [43m    [49m[43mquotechar[49m[43m=[49m[43mquotechar[49m[43m,[49m
+[32m   4002[39m [43m    [49m[43mdate_format[49m[43m=[49m[43mdate_format[49m[43m,[49m
+[32m   4003[39m [43m    [49m[43mdoublequote[49m[43m=[49m[43mdoublequote[49m[43m,[49m
+[32m   4004[39m [43m    [49m[43mescapechar[49m[43m=[49m[43mescapechar[49m[43m,[49m
+[32m   4005[39m [43m    [49m[43mstorage_options[49m[43m=[49m[43mstorage_options[49m[43m,[49m
+[32m   4006[39m [43m[49m[43m)[49m
+
+[36mFile [39m[32m~\AppData\Local\Programs\Python\Python311\Lib\site-packages\pandas\io\formats\format.py:1014[39m, in [36mDataFrameRenderer.to_csv[39m[34m(self, path_or_buf, encoding, sep, columns, index_label, mode, compression, quoting, quotechar, lineterminator, chunksize, date_format, doublequote, escapechar, errors, storage_options)[39m
+[32m    993[39m     created_buffer = [38;5;28;01mFalse[39;00m
+[32m    995[39m csv_formatter = CSVFormatter(
+[32m    996[39m     path_or_buf=path_or_buf,
+[32m    997[39m     lineterminator=lineterminator,
+[32m   (...)[39m[32m   1012[39m     formatter=[38;5;28mself[39m.fmt,
+[32m   1013[39m )
+[32m-> [39m[32m1014[39m [43mcsv_formatter[49m[43m.[49m[43msave[49m[43m([49m[43m)[49m
+[32m   1016[39m [38;5;28;01mif[39;00m created_buffer:
+[32m   1017[39m     [38;5;28;01massert[39;00m [38;5;28misinstance[39m(path_or_buf, StringIO)
+
+[36mFile [39m[32m~\AppData\Local\Programs\Python\Python311\Lib\site-packages\pandas\io\formats\csvs.py:251[39m, in [36mCSVFormatter.save[39m[34m(self)[39m
+[32m    247[39m [38;5;250m[39m[33;03m"""[39;00m
+[32m    248[39m [33;03mCreate the writer & save.[39;00m
+[32m    249[39m [33;03m"""[39;00m
+[32m    250[39m [38;5;66;03m# apply compression and byte/text conversion[39;00m
+[32m--> [39m[32m251[39m [38;5;28;01mwith[39;00m [43mget_handle[49m[43m([49m
+[32m    252[39m [43m    [49m[38;5;28;43mself[39;49m[43m.[49m[43mfilepath_or_buffer[49m[43m,[49m
+[32m    253[39m [43m    [49m[38;5;28;43mself[39;49m[43m.[49m[43mmode[49m[43m,[49m
+[32m    254[39m [43m    [49m[43mencoding[49m[43m=[49m[38;5;28;43mself[39;49m[43m.[49m[43mencoding[49m[43m,[49m
+[32m    255[39m [43m    [49m[43merrors[49m[43m=[49m[38;5;28;43mself[39;49m[43m.[49m[43merrors[49m[43m,[49m
+[32m    256[39m [43m    [49m[43mcompression[49m[43m=[49m[38;5;28;43mself[39;49m[43m.[49m[43mcompression[49m[43m,[49m
+[32m    257[39m [43m    [49m[43mstorage_options[49m[43m=[49m[38;5;28;43mself[39;49m[43m.[49m[43mstorage_options[49m[43m,[49m
+[32m    258[39m [43m[49m[43m)[49m [38;5;28;01mas[39;00m handles:
+[32m    259[39m     [38;5;66;03m# Note: self.encoding is irrelevant here[39;00m
+[32m    260[39m     [38;5;28mself[39m.writer = csvlib.writer(
+[32m    261[39m         handles.handle,
+[32m    262[39m         lineterminator=[38;5;28mself[39m.lineterminator,
+[32m   (...)[39m[32m    267[39m         quotechar=[38;5;28mself[39m.quotechar,
+[32m    268[39m     )
+[32m    270[39m     [38;5;28mself[39m._save()
+
+[36mFile [39m[32m~\AppData\Local\Programs\Python\Python311\Lib\site-packages\pandas\io\common.py:749[39m, in [36mget_handle[39m[34m(path_or_buf, mode, encoding, compression, memory_map, is_text, errors, storage_options)[39m
+[32m    747[39m [38;5;66;03m# Only for write methods[39;00m
+[32m    748[39m [38;5;28;01mif[39;00m [33m"[39m[33mr[39m[33m"[39m [38;5;129;01mnot[39;00m [38;5;129;01min[39;00m mode [38;5;129;01mand[39;00m is_path:
+[32m--> [39m[32m749[39m     [43mcheck_parent_directory[49m[43m([49m[38;5;28;43mstr[39;49m[43m([49m[43mhandle[49m[43m)[49m[43m)[49m
+[32m    751[39m [38;5;28;01mif[39;00m compression:
+[32m    752[39m     [38;5;28;01mif[39;00m compression != [33m"[39m[33mzstd[39m[33m"[39m:
+[32m    753[39m         [38;5;66;03m# compression libraries do not like an explicit text-mode[39;00m
+
+[36mFile [39m[32m~\AppData\Local\Programs\Python\Python311\Lib\site-packages\pandas\io\common.py:616[39m, in [36mcheck_parent_directory[39m[34m(path)[39m
+[32m    614[39m parent = Path(path).parent
+[32m    615[39m [38;5;28;01mif[39;00m [38;5;129;01mnot[39;00m parent.is_dir():
+[32m--> [39m[32m616[39m     [38;5;28;01mraise[39;00m [38;5;167;01mOSError[39;00m([33mrf[39m[33m"[39m[33mCannot save file into a non-existent directory: [39m[33m'[39m[38;5;132;01m{[39;00mparent[38;5;132;01m}[39;00m[33m'[39m[33m"[39m)
+
+[31mOSError[39m: Cannot save file into a non-existent directory: 'Aus_Freight_Logistic'
+
+
+2025-10-28 11:46:43,273 - ERROR - Automation failed!
+2025-10-28 11:46:47,824 - INFO - Email sent successfully: Freight Logistics Automation - FAILED
+2025-10-28 11:46:47,824 - ERROR - Failure notification sent
+2025-10-28 11:49:07,305 - INFO - Simple Freight Logistics Automation Started
+2025-10-28 11:49:07,305 - INFO - Project Directory: C:\Cursor AI_projects\Aus_Freight_Logistic
+2025-10-28 11:49:07,305 - INFO - Starting Freight Logistics Automation
+2025-10-28 11:49:07,305 - INFO - Started at: 2025-10-28 11:49:07
+2025-10-28 11:49:07,305 - INFO - Force fresh data download - running extractor...
+2025-10-28 11:49:07,305 - INFO - Collecting fresh data from ABS website...
+2025-10-28 11:49:35,133 - INFO - Simple Freight Logistics Automation Started
+2025-10-28 11:49:35,133 - INFO - Project Directory: C:\Cursor AI_projects\Aus_Freight_Logistic
+2025-10-28 11:49:35,133 - INFO - Starting Freight Logistics Automation
+2025-10-28 11:49:35,133 - INFO - Started at: 2025-10-28 11:49:35
+2025-10-28 11:49:35,133 - INFO - Force fresh data download - running extractor...
+2025-10-28 11:49:35,145 - INFO - Collecting fresh data from ABS website...
+2025-10-28 11:50:08,007 - INFO - Data collection completed successfully
+2025-10-28 11:50:08,007 - INFO - Running data cleaning...
+2025-10-28 11:50:20,221 - INFO - Data cleaning completed successfully
+2025-10-28 11:50:20,221 - INFO - Running data analysis...
+2025-10-28 11:50:52,291 - INFO - Data analysis completed successfully
+2025-10-28 11:50:52,300 - INFO - Updating dashboard...
+2025-10-28 11:50:52,301 - INFO - Dashboard updated successfully
+2025-10-28 11:50:52,301 - INFO - Dashboard available at: http://localhost:8501
+2025-10-28 11:50:52,302 - INFO - Automation completed successfully!
+2025-10-28 11:50:52,303 - INFO - Duration: 0:01:17.169254
+2025-10-28 11:50:57,600 - INFO - Email sent successfully: Freight Logistics Automation - SUCCESS
+2025-10-28 11:50:57,600 - INFO - Success notification sent
+2025-10-28 12:42:27,411 - INFO - Simple Freight Logistics Automation Started
+2025-10-28 12:42:27,411 - INFO - Project Directory: C:\Cursor AI_projects\Aus_Freight_Logistic
+2025-10-28 12:42:27,412 - INFO - Starting Freight Logistics Automation
+2025-10-28 12:42:27,412 - INFO - Started at: 2025-10-28 12:42:27
+2025-10-28 12:42:27,412 - INFO - Force fresh data download - running extractor...
+2025-10-28 12:42:27,412 - INFO - Collecting fresh data from ABS website...
+2025-10-28 12:44:46,137 - INFO - Simple Freight Logistics Automation Started
+2025-10-28 12:44:46,137 - INFO - Project Directory: C:\Cursor AI_projects\Aus_Freight_Logistic
+2025-10-28 12:44:46,137 - INFO - Starting Freight Logistics Automation
+2025-10-28 12:44:46,137 - INFO - Started at: 2025-10-28 12:44:46
+2025-10-28 12:44:46,137 - INFO - Force fresh data download - running extractor...
+2025-10-28 12:44:46,137 - INFO - Collecting fresh data from ABS website...
+2025-10-28 12:45:30,308 - INFO - Data collection completed successfully
+2025-10-28 12:45:30,308 - INFO - Running data cleaning...
+2025-10-28 12:47:24,162 - INFO - Data cleaning completed successfully
+2025-10-28 12:47:24,163 - INFO - Running data analysis...
+2025-10-28 12:49:44,126 - INFO - Data analysis completed successfully
+2025-10-28 12:49:44,127 - INFO - Updating dashboard...
+2025-10-28 12:49:44,127 - INFO - Dashboard updated successfully
+2025-10-28 12:49:44,127 - INFO - Dashboard available at: http://localhost:8501
+2025-10-28 12:49:44,127 - INFO - Automation completed successfully!
+2025-10-28 12:49:44,127 - INFO - Duration: 0:04:57.990505
+2025-10-28 12:49:48,693 - INFO - Email sent successfully: Freight Logistics Automation - SUCCESS
+2025-10-28 12:49:48,694 - INFO - Success notification sent

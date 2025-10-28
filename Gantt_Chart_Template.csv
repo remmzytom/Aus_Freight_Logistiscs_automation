@@ -1,0 +1,15 @@
+Task Name,Start Date,End Date,Duration (Days),Progress %,Status,Dependencies,Responsible
+Project Setup & Planning,2025-10-01,2025-10-05,5,100%,Completed,,Project Manager
+API Connection Development,2025-10-01,2025-10-03,3,100%,Completed,Project Setup,Developer
+SSL Certificate Resolution,2025-10-03,2025-10-04,2,100%,Completed,API Connection,Developer
+Data Extraction Framework,2025-10-04,2025-10-06,3,90%,In Progress,SSL Resolution,Developer
+Data Processing Pipeline,2025-10-06,2025-10-08,3,70%,In Progress,Data Extraction,Developer
+Pagination Implementation,2025-10-07,2025-10-09,3,60%,In Progress,Data Processing,Developer
+Data Quality Validation,2025-10-09,2025-10-11,3,0%,Planned,Pagination,Developer
+2025 Data Extraction,2025-10-11,2025-10-13,3,0%,Planned,Data Validation,Developer
+Data Analysis & Insights,2025-10-13,2025-10-15,3,0%,Planned,2025 Data Extraction,Analyst
+Stakeholder Review,2025-10-15,2025-10-17,3,0%,Planned,Data Analysis,Project Manager
+System Optimization,2025-10-17,2025-10-19,3,0%,Planned,Stakeholder Review,Developer
+Final Testing,2025-10-19,2025-10-21,3,0%,Planned,System Optimization,QA
+Documentation,2025-10-21,2025-10-23,3,0%,Planned,Final Testing,Technical Writer
+Project Delivery,2025-10-23,2025-10-25,3,0%,Planned,Documentation,Project Manager
