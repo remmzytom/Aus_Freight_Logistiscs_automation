@@ -1,48 +1,52 @@
-name: Monthly Freight Logistics Automation
+name: Monthly Freight Data Automation
 
-# Run on the 1st of every month at 6 AM UTC
 on:
   schedule:
-    - cron: '0 6 1 * *'  # Monthly at 6 AM UTC
-  workflow_dispatch:  # Allow manual trigger
+    - cron: "0 6 1 * *"  # 1st of every month at 6 AM UTC
+  workflow_dispatch:  # Allow manual runs
 
 jobs:
-  monthly-automation:
+  automate:
     runs-on: ubuntu-latest
     
     steps:
-    - name: Checkout repository
+    - name: Checkout code
       uses: actions/checkout@v3
-      
+    
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v3
       with:
-        python-version: '3.9'
-        
+        python-version: "3.9"
+    
     - name: Install dependencies
       run: |
         pip install -r requirements.txt
-        pip install jupyter
-        pip install pandas numpy matplotlib plotly streamlit
-        
-    - name: Create data directory
-      run: mkdir -p data
-      
-    - name: Run monthly automation
+    
+    - name: Run data collection
       run: |
-        python monthly_automation.py
-        
-    - name: Commit updated data
+        python 2024_2025_extractor.py
+    
+    - name: Run data cleaning
       run: |
-        git config --local user.email "action@github.com"
-        git config --local user.name "GitHub Action"
-        git add .
-        git commit -m "Monthly automation: $(date)" || exit 0
-        git push
-        
+        jupyter nbconvert --to notebook --execute data_cleaning.ipynb --output data_cleaning_executed.ipynb
+    
+    - name: Run data analysis
+      run: |
+        jupyter nbconvert --to notebook --execute data_analysis.ipynb --output data_analysis_executed.ipynb
+    
+    - name: Upload results
+      uses: actions/upload-artifact@v3
+      with:
+        name: freight-data-results
+        path: data/
+    
+    - name: Upload notebooks
+      uses: actions/upload-artifact@v3
+      with:
+        name: executed-notebooks
+        path: "*_executed.ipynb"
+    
     - name: Deploy to Streamlit Cloud
-      if: success()
       run: |
-        echo "Dashboard updated successfully"
-        echo "Streamlit Cloud will automatically redeploy"
-
+        echo "Dashboard will be automatically updated when code is pushed to main branch"
+        echo "Visit your Streamlit Cloud app to see the updated dashboard"
