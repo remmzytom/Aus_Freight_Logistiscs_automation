@@ -283,7 +283,8 @@ st.markdown("""
 def load_data():
     """Load data with accurate KPIs and fast dashboard"""
     try:
-        file_path = r'C:\Cursor AI_projects\Aus_Freight_Logistic\data\exports_cleaned.csv'
+        # Use relative path for Streamlit Cloud compatibility
+        file_path = 'data/exports_cleaned.csv'
         
         # Calculate accurate KPIs from full dataset (chunked)
         # Initialize KPI variables
