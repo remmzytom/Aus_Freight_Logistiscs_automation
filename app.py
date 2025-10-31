@@ -10,6 +10,7 @@ from plotly.subplots import make_subplots
 from datetime import datetime
 import warnings
 warnings.filterwarnings('ignore')
+import gc
 
 # Disable Pillow decompression bomb check
 from PIL import Image
@@ -371,78 +372,84 @@ def ensure_data_file() -> str:
     return cleaned_path
 
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=3600, show_spinner=False)
+def load_exports_cleaned(path: str) -> pd.DataFrame:
+    """Read only needed columns, add compatibility shims, and downcast numerics to save RAM."""
+    preferred_columns = [
+        'year', 'month', 'month_number', 'country_of_destination', 'state_of_origin',
+        'value_fob_aud', 'gross_weight_tonnes', 'product_description',
+        'prod_descpt_code', 'sitc_code', 'port_of_loading'
+    ]
+
+    header = pd.read_csv(path, nrows=0)
+    usecols = [c for c in preferred_columns if c in header.columns]
+    df = pd.read_csv(path, usecols=usecols)
+
+    # Ensure month_number exists
+    if 'month_number' not in df.columns and 'month' in df.columns:
+        month_map = {"Jan":1,"Feb":2,"Mar":3,"Apr":4,"May":5,"Jun":6,"Jul":7,"Aug":8,"Sep":9,"Oct":10,"Nov":11,"Dec":12,
+                     'January':1,'February':2,'March':3,'April':4,'May':5,'June':6,'July':7,'August':8,'September':9,'October':10,'November':11,'December':12}
+        df['month_number'] = df['month'].astype(str).str[:3].str.title().map({k[:3].title(): v for k, v in month_map.items() if isinstance(k, str)}).fillna(df.get('month_number'))
+
+    # Ensure product_description exists
+    if 'product_description' not in df.columns:
+        def _norm(s: str) -> str:
+            import re
+            return re.sub(r"[^a-z0-9]", "", str(s).lower())
+        candidates = [c for c in df.columns if _norm(c) in {
+            'productdescription','product','description','sitc','sitcdescription','commodity'
+        }]
+        df['product_description'] = df[candidates[0]].astype(str) if candidates else 'All Products'
+
+    # Ensure code column exists for industry mapping
+    if 'prod_descpt_code' not in df.columns and 'sitc_code' in df.columns:
+        df['prod_descpt_code'] = df['sitc_code'].astype(str)
+
+    # Downcast numerics to reduce memory
+    for col in df.select_dtypes(include=['int64','float64']).columns:
+        if pd.api.types.is_integer_dtype(df[col]):
+            df[col] = pd.to_numeric(df[col], downcast='integer')
+        else:
+            df[col] = pd.to_numeric(df[col], downcast='float')
+
+    # Derived fields used across the app
+    if 'year' in df.columns and 'month_number' in df.columns:
+        df['date'] = pd.to_datetime(df['year'].astype(str) + '-' + df['month_number'].astype(str).str.zfill(2) + '-01')
+    if {'value_fob_aud','gross_weight_tonnes'}.issubset(df.columns):
+        df['value_per_tonne'] = df['value_fob_aud'] / df['gross_weight_tonnes']
+
+    gc.collect()
+    return df
+
+
+@st.cache_data(ttl=600)
 def load_data():
-    """Load data with accurate KPIs and fast dashboard"""
+    """Efficiently load dataset and compute KPIs."""
     try:
-        # Ensure the cleaned dataset exists (auto-generate on first deploy)
         file_path = ensure_data_file()
-        
-        # Calculate accurate KPIs from full dataset (chunked)
-        # Initialize KPI variables
-        total_value = 0
-        total_weight = 0
-        total_records = 0
-        total_shipments = 0
-        
-        # Process full dataset in chunks for KPIs
-        for chunk in pd.read_csv(file_path, chunksize=50000):
-            total_value += chunk['value_fob_aud'].sum()
-            total_weight += chunk['gross_weight_tonnes'].sum()
-            total_records += len(chunk)
-            total_shipments += len(chunk)
-        
-        # Store accurate KPIs
+        df = load_exports_cleaned(file_path)
+
+        total_value = float(df['value_fob_aud'].sum()) if 'value_fob_aud' in df.columns else 0.0
+        total_weight = float(df['gross_weight_tonnes'].sum()) if 'gross_weight_tonnes' in df.columns else 0.0
+        total_records = len(df)
+        total_shipments = total_records
+
         accurate_kpis = {
             'total_value': total_value,
             'total_weight': total_weight,
             'total_records': total_records,
             'total_shipments': total_shipments,
-            'avg_shipment_value': total_value / total_shipments if total_shipments > 0 else 0,
-            'median_shipment_value': 0  # We'll calculate this from sample
+            'avg_shipment_value': (total_value / total_shipments) if total_shipments > 0 else 0.0,
+            'median_shipment_value': float(df['value_fob_aud'].median()) if 'value_fob_aud' in df.columns else 0.0
         }
-        
-        # Load full dataset in chunks for detailed analysis
-        chunk_list = []
-        
-        for chunk in pd.read_csv(file_path, chunksize=50000):
-            chunk_list.append(chunk)
-        
-        # Combine all chunks
-        df_sample = pd.concat(chunk_list, ignore_index=True)
 
-        # Ensure product_description exists for filters/visuals (compat with different source names/casing)
-        import re
-        if 'product_description' not in df_sample.columns:
-            def _norm(s: str) -> str:
-                return re.sub(r"[^a-z0-9]", "", str(s).lower())
-            candidates = ['product_description', 'product description', 'product', 'sitc', 'commodity', 'sitc description', 'sitc_description']
-            norm_to_col = { _norm(c): c for c in df_sample.columns }
-            src = None
-            for cand in candidates:
-                key = _norm(cand)
-                if key in norm_to_col:
-                    src = norm_to_col[key]
-                    break
-            if src:
-                df_sample['product_description'] = df_sample[src].astype(str)
-            else:
-                df_sample['product_description'] = 'All Products'
-        
-        # Add calculated fields
-        df_sample['date'] = pd.to_datetime(df_sample['year'].astype(str) + '-' + df_sample['month_number'].astype(str).str.zfill(2) + '-01')
-        df_sample['value_per_tonne'] = df_sample['value_fob_aud'] / df_sample['gross_weight_tonnes']
-        
-        # Calculate median from sample (this is statistically valid)
-        accurate_kpis['median_shipment_value'] = df_sample['value_fob_aud'].median()
-        
-        return df_sample, accurate_kpis
-        
+        gc.collect()
+        return df, accurate_kpis
     except Exception as e:
         st.error(f"Error loading data: {str(e)}")
         return None, None
 
-    # Load data
+# Load data
 with st.spinner('Loading data... This may take a moment for the full dataset.'):
     df, accurate_kpis = load_data()
 
@@ -675,7 +682,7 @@ if df is not None and accurate_kpis is not None:
             yaxis=dict(tickformat='.1f')
         )
         fig1.update_xaxes(tickangle=45)
-        st.plotly_chart(fig1, use_container_width=True)
+        st.plotly_chart(fig1, width='stretch')
 
         # Chart 2: Export Weight Over Time (Interactive)
         st.subheader("Monthly Export Weight Trend")
@@ -707,7 +714,7 @@ if df is not None and accurate_kpis is not None:
             yaxis=dict(tickformat='.1f')
         )
         fig2.update_xaxes(tickangle=45)
-        st.plotly_chart(fig2, use_container_width=True)
+        st.plotly_chart(fig2, width='stretch')
 
         # Chart 3: Value per Tonne Over Time (Interactive) - KEY METRIC FOR LOGISTICS!
         st.subheader("Average Value per Tonne Trend")
@@ -737,7 +744,7 @@ if df is not None and accurate_kpis is not None:
             yaxis=dict(tickformat=',.0f')
         )
         fig3.update_xaxes(tickangle=45)
-        st.plotly_chart(fig3, use_container_width=True)
+        st.plotly_chart(fig3, width='stretch')
     else:
         st.warning("No data available for the selected date range. Please adjust your date filter.")
     
@@ -792,7 +799,7 @@ if df is not None and accurate_kpis is not None:
         hovertemplate='<b>%{y}</b><br>Export Value: $%{x:.1f}B<extra></extra>'
     )
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
     
     # 4. PRODUCT ANALYSIS (from your notebook Cell 11)
     st.markdown('<h2 class="section-header">Product Analysis</h2>', unsafe_allow_html=True)
