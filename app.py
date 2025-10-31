@@ -869,7 +869,14 @@ if df is not None and accurate_kpis is not None:
     df_full_industry = df_filtered.copy()
     
     # SITC Code-based Product Categorization - Clean presentation
-    
+
+    # Ensure the expected code column exists; map from 'sitc_code' when available
+    if 'prod_descpt_code' not in df_full_industry.columns:
+        if 'sitc_code' in df_full_industry.columns:
+            df_full_industry['prod_descpt_code'] = df_full_industry['sitc_code'].astype(str)
+        else:
+            df_full_industry['prod_descpt_code'] = ''
+
     # Import SITC mapping and create sitc_category column
     try:
         from sitc_mapping import SITC_MAPPING
