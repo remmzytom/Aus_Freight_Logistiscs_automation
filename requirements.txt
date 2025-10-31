@@ -3,9 +3,11 @@ pandas
 numpy
 matplotlib
 plotly
+seaborn
 jupyter
 nbconvert
 requests
 openpyxl
 xlrd
 schedule
+scikit-learn
