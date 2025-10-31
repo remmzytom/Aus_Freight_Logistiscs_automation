@@ -280,15 +280,27 @@ st.markdown("""
 
 # Load data function with accurate KPIs and fast dashboard
 def ensure_data_file() -> str:
-    """Ensure cleaned data file exists; if missing, generate it on the fly.
-    Returns the relative path to the cleaned CSV or raises an exception.
+    """Ensure cleaned data file exists and is fresh (auto-refreshes if >30 days old).
+    - If missing: generate immediately
+    - If older than 30 days: regenerate from ABS website
+    Returns the relative path to the cleaned CSV.
     """
     import os
+    import time
     os.makedirs('data', exist_ok=True)
 
     cleaned_path = 'data/exports_cleaned.csv'
+    
+    # Check if file exists and if it needs refresh (>30 days old)
     if os.path.exists(cleaned_path):
-        return cleaned_path
+        file_age_days = (time.time() - os.path.getmtime(cleaned_path)) / (60 * 60 * 24)
+        if file_age_days > 30:
+            # Data is stale - refresh it
+            st.info(f"🔄 Data is {int(file_age_days)} days old. Refreshing from ABS website...")
+            # Fall through to regenerate below
+        else:
+            # Data is fresh, return it
+            return cleaned_path
 
     # Try to generate raw exports and produce a minimal cleaned file
     extract_func = None
@@ -326,6 +338,18 @@ def ensure_data_file() -> str:
             df[col] = pd.to_numeric(df[col], errors='coerce')
     if 'month' in df.columns and 'year' not in df.columns:
         df['year'] = df['month'].astype(str).str.extract(r'(\d{4})')
+    
+    # Create month_number column (required by dashboard)
+    if 'month' in df.columns and 'month_number' not in df.columns:
+        month_map = {
+            'January': 1, 'February': 2, 'March': 3, 'April': 4,
+            'May': 5, 'June': 6, 'July': 7, 'August': 8,
+            'September': 9, 'October': 10, 'November': 11, 'December': 12
+        }
+        # Extract month name from month column (format: "January 2024")
+        df['month_name'] = df['month'].astype(str).str.split().str[0]
+        df['month_number'] = df['month_name'].map(month_map).fillna(1)
+        df = df.drop(columns=['month_name'], errors='ignore')
 
     df.to_csv(cleaned_path, index=False)
     return cleaned_path
