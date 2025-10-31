@@ -438,6 +438,14 @@ with st.spinner('Loading data... This may take a moment for the full dataset.'):
     df, accurate_kpis = load_data()
 
 if df is not None and accurate_kpis is not None:
+    # Final compatibility guard: ensure 'product_description' exists even if cached data is old
+    if 'product_description' not in df.columns:
+        for _col in ['product description', 'product', 'sitc', 'commodity', 'SITC description', 'sitc_description']:
+            if _col in df.columns:
+                df['product_description'] = df[_col].astype(str)
+                break
+        else:
+            df['product_description'] = 'All Products'
     # Clean presentation - no status messages
     
     # Sidebar controls
