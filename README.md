@@ -1,55 +1,153 @@
-# ABS International Merchandise Trade Data Extractor
+# Freight Logistics Automation Project
 
-This project queries the Australian Bureau of Statistics (ABS) International Merchandise Trade – Exports dataset via the official Data API, specifically filtering for 2025 records.
+Automated system for collecting, cleaning, analyzing, and visualizing Australian freight export data from the ABS (Australian Bureau of Statistics).
+
+## Overview
+
+This project automates the monthly process of:
+1. **Data Collection** - Downloading 2024-2025 export data from ABS website
+2. **Data Cleaning** - Processing and cleaning raw data
+3. **Data Analysis** - Generating insights and visualizations
+4. **Dashboard Update** - Displaying updated data in an interactive Streamlit dashboard
 
 ## Features
 
-- **API Integration**: Uses the official CKAN Data API from `catalogue.data.infrastructure.gov.au`
-- **JSON-based Filtering**: Uses simple JSON filters instead of SQL queries - no SQL knowledge required!
-- **Real-time Data**: Queries live data directly from the API without downloading files
-- **Data Processing**: Converts specified columns (`quantity`, `gross_weight_tonnes`, `value_fob_aud`) to numeric format
-- **Output**: Saves cleaned data as `exports_2025.csv`
-- **Comprehensive Logging**: Provides detailed logging and summary statistics
+- ✅ **Automated Monthly Updates** - Runs automatically on the 1st of every month via GitHub Actions
+- ✅ **Cloud-Based** - No local setup required for automation
+- ✅ **Email Notifications** - Success/failure notifications via email
+- ✅ **Interactive Dashboard** - Streamlit dashboard with visualizations and insights
+- ✅ **Memory Efficient** - Handles large datasets (1.5M+ records) efficiently
 
-## Installation
+## Quick Start
 
-1. Install required dependencies:
+### Local Development
+
+1. **Clone the repository:**
+```bash
+git clone https://github.com/remmzytom/Aus_Freight_Logistiscs_automation.git
+cd Aus_Freight_Logistiscs_automation
+```
+
+2. **Install dependencies:**
 ```bash
 pip install -r requirements.txt
 ```
 
-## Usage
-
-Run the data extraction script:
+3. **Run automation manually:**
 ```bash
-python abs_extractor.py
+python simple_automation.py
 ```
 
-## Output
+4. **View dashboard:**
+```bash
+streamlit run app.py
+```
 
-The script will:
-1. Connect to the ABS Data API
-2. Query the dataset schema to understand available fields
-3. Use JSON-based filtering: `{"month": "2025"}` to get 2025 records
-4. Process the API response and convert to pandas DataFrame
-5. Convert specified columns to numeric format
-6. Save the cleaned data to `exports_2025.csv`
-7. Display the number of rows and first 5 records
-8. Show summary statistics for numeric columns
+## Project Structure
 
-## Files Generated
+```
+Aus_Freight_Logistic/
+├── app.py                          # Streamlit dashboard
+├── simple_automation.py            # Main automation orchestrator
+├── 2024_2025_extractor.py         # Data collection script
+├── data_cleaning.ipynb            # Data cleaning notebook
+├── data_analysis.ipynb            # Data analysis notebook
+├── scheduler.py                   # Local scheduler (optional)
+├── .github/
+│   └── workflows/
+│       └── monthly_automation.yml  # GitHub Actions workflow
+├── data/                          # Data files (not in Git - too large)
+│   ├── exports_2024_2025.csv
+│   └── exports_cleaned.csv
+└── requirements.txt               # Python dependencies
+```
 
-- `exports_2025.csv` - Processed 2025 data from API (saved in `Aus_fright_logistic` folder)
-- Log output with processing details
+## Automation Flow
 
-## API Endpoints Used
+```
+Monthly Schedule (1st of month, 6 AM UTC)
+    ↓
+GitHub Actions Workflow
+    ↓
+1. Download 2024-2025 data from ABS
+    ↓
+2. Clean and process data
+    ↓
+3. Run analysis and generate insights
+    ↓
+4. Send email notification
+    ↓
+5. Dashboard auto-updates (Streamlit Cloud)
+```
 
-- **Data Search**: `https://catalogue.data.infrastructure.gov.au/api/3/action/datastore_search`
-- **Resource ID**: `46d46443-58ba-42b4-bbeb-45c021b8257a`
-- **Filter Method**: JSON-based filtering (no SQL required!)
+## Deployment
+
+### GitHub Actions
+- **Schedule:** Runs automatically on the 1st of every month at 6 AM UTC
+- **Manual Trigger:** Available in GitHub Actions tab
+- **Location:** `.github/workflows/monthly_automation.yml`
+
+### Streamlit Cloud
+- **Setup:** See `STREAMLIT_CLOUD_SETUP.md` for detailed instructions
+- **Auto-deploy:** Dashboard updates when code is pushed to main branch
+- **URL:** Will be provided after deployment
+
+## Configuration
+
+### Email Notifications
+Edit `simple_automation.py` to configure email settings:
+```python
+self.email_config = {
+    'smtp_server': 'smtp.gmail.com',
+    'smtp_port': 587,
+    'sender_email': 'your_email@gmail.com',
+    'sender_password': 'your_app_password',
+    'recipient_emails': ['recipient@example.com']
+}
+```
+
+For GitHub Actions, use GitHub Secrets (see `DEPLOYMENT_GUIDE.md`).
+
+## Documentation
+
+- **`DEPLOYMENT_GUIDE.md`** - Complete deployment and setup guide
+- **`STREAMLIT_CLOUD_SETUP.md`** - Streamlit Cloud deployment instructions
+- **`EMAIL_SETUP.md`** - Email notification configuration guide
 
 ## Data Source
 
-Dataset: ABS International Merchandise Trade – Exports
-API Base URL: https://catalogue.data.infrastructure.gov.au/api/3/action/
-Resource: https://catalogue.data.infrastructure.gov.au/dataset/abs-data-for-international-merchandise-trade/resource/46d46443-58ba-42b4-bbeb-45c021b8257a
+- **Dataset:** ABS International Merchandise Trade – Exports
+- **Website:** https://www.abs.gov.au/
+- **Data Range:** 2024-2025 export records
+- **Update Frequency:** Monthly
+
+## Requirements
+
+- Python 3.9+
+- All packages listed in `requirements.txt`
+- GitHub account (for automation)
+- Streamlit Cloud account (for dashboard hosting)
+
+## Troubleshooting
+
+See `DEPLOYMENT_GUIDE.md` for detailed troubleshooting steps.
+
+Common issues:
+- **Large files:** Data files are not in Git (too large) - will be generated by automation
+- **Email errors:** Check app password and SMTP settings
+- **Dashboard not updating:** Verify Streamlit Cloud deployment is active
+
+## Support
+
+For questions or issues:
+1. Check the documentation files
+2. Review GitHub Actions logs
+3. Check `automation.log` for local runs
+
+## License
+
+Internal company project - All rights reserved
+
+---
+
+**Last Updated:** October 2025
