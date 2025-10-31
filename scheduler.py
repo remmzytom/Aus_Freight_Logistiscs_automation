@@ -9,7 +9,6 @@ It can be run as a Windows service or scheduled task.
 Usage:
     python scheduler.py
 
-Author: Intern Project
 """
 
 import schedule
@@ -53,15 +52,12 @@ def main():
     """Main scheduler function"""
     logger.info("Freight Logistics Scheduler Started")
     
-    # Schedule automation to run on the 1st of every month at 6 AM
+    # Schedule automation to run once per month (on the same day you start this scheduler)
     schedule.every().month.do(run_automation)
     
-    # Also schedule a test run every day at 2 PM (for testing)
-    schedule.every().day.at("14:00").do(run_automation)
-    
     logger.info("Scheduler configured:")
-    logger.info("- Monthly automation: 1st of every month at 6 AM")
-    logger.info("- Daily test run: Every day at 2 PM")
+    logger.info("- Monthly automation: Once per month (on the same day you started this scheduler)")
+    logger.info("- Runs only ONCE per month - no daily tests")
     logger.info("Press Ctrl+C to stop the scheduler")
     
     try:
@@ -75,3 +71,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+
