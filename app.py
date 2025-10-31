@@ -461,9 +461,13 @@ def load_data():
         st.error(f"Error loading data: {str(e)}")
         return None, None
 
-# Load data
-with st.spinner('Loading data... This may take a moment for the full dataset.'):
-    df, accurate_kpis = load_data()
+# Load data with error handling
+try:
+    with st.spinner('Loading data... This may take a moment for the full dataset.'):
+        df, accurate_kpis = load_data()
+except Exception as e:
+    st.error(f"Failed to load data: {str(e)}")
+    st.stop()
 
 if df is not None and accurate_kpis is not None:
     # Final compatibility guard: ensure 'product_description' exists even if cached data is old
@@ -760,6 +764,9 @@ if df is not None and accurate_kpis is not None:
     else:
         st.warning("No data available for the selected date range. Please adjust your date filter.")
     
+    # Clean up memory after time series section
+    gc.collect()
+    
     # Clean presentation - no redundant tables
     
     # 3. COUNTRY ANALYSIS (from your notebook Cell 9)
@@ -877,7 +884,7 @@ if df is not None and accurate_kpis is not None:
         hovertemplate='<b>%{y}</b><br>Export Value: $%{x:,.0f}<extra></extra>'
     )
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
     
     # 4.5. INDUSTRY CATEGORY ANALYSIS (EXACT from your notebook) - Using FULL dataset
     st.markdown('<h2 class="section-header">Industry Category Analysis</h2>', unsafe_allow_html=True)
@@ -986,7 +993,7 @@ if df is not None and accurate_kpis is not None:
         customdata=top_industries['Value_Percentage']
     )
     
-    st.plotly_chart(fig1, use_container_width=True)
+    st.plotly_chart(fig1, width='stretch')
     
     # Chart 2: Industry Value Density (Interactive) - EXACT from your notebook
     st.subheader("Industry Value Density (Value per Tonne Shipped)")
@@ -1021,7 +1028,7 @@ if df is not None and accurate_kpis is not None:
         hovertemplate='<b>%{x}</b><br>Value per Tonne: $%{y:,.0f}<extra></extra>'
     )
     
-    st.plotly_chart(fig2, use_container_width=True)
+    st.plotly_chart(fig2, width='stretch')
     
     # Chart 3: Performance Summary Table - EXACT from your notebook
     st.subheader("Industry Performance Summary Table")
@@ -1152,7 +1159,7 @@ if df is not None and accurate_kpis is not None:
     )
     fig1.update_yaxes(autorange="reversed")
     fig1.update_xaxes(tickformat='$,.0f')
-    st.plotly_chart(fig1, use_container_width=True)
+    st.plotly_chart(fig1, width='stretch')
     
     # 2. TOP DESTINATION COUNTRIES (Interactive)
     st.subheader("Top 10 Destination Countries")
@@ -1179,7 +1186,7 @@ if df is not None and accurate_kpis is not None:
         textfont=dict(size=10, color='#2c3e50'),
         hovertemplate='<b>%{y}</b><br>Import Value: $%{x:,.0f}<extra></extra>'
     )
-    st.plotly_chart(fig2, use_container_width=True)
+    st.plotly_chart(fig2, width='stretch')
     
     # 3. PRODUCT DIVERSIFICATION BY COUNTRY (Interactive)
     st.subheader("Product Diversification by Country")
@@ -1204,7 +1211,7 @@ if df is not None and accurate_kpis is not None:
         height=600
     )
     fig3.update_yaxes(tickformat='$,.0f')
-    st.plotly_chart(fig3, use_container_width=True)
+    st.plotly_chart(fig3, width='stretch')
     
     # 4. MARKET CONCENTRATION ANALYSIS (Interactive)
     st.subheader("Market Concentration Analysis")
@@ -1229,7 +1236,7 @@ if df is not None and accurate_kpis is not None:
         height=500
     )
     fig4.update_traces(textposition='inside', textinfo='percent+label')
-    st.plotly_chart(fig4, use_container_width=True)
+    st.plotly_chart(fig4, width='stretch')
     
     # Clean dashboard - no unnecessary text
     
@@ -1304,7 +1311,7 @@ if df is not None and accurate_kpis is not None:
         showlegend=False
     )
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
     
     # 4.8. VOLUME VS VALUE ANALYSIS (EXACT from your notebook)
     st.markdown('<h2 class="section-header">Volume vs Value Analysis</h2>', unsafe_allow_html=True)
@@ -1482,7 +1489,7 @@ if df is not None and accurate_kpis is not None:
                 borderwidth=1
             )
             
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
         else:
             # No products in this category
             st.info(f"No products found in the {category_name} category.")
@@ -1545,7 +1552,7 @@ if df is not None and accurate_kpis is not None:
         customdata=states_df['percentage']
     )
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
     
     # Transport Mode Analysis (from your notebook Cell 15)
     st.subheader("Export Value by Transport Mode")
@@ -1599,7 +1606,7 @@ if df is not None and accurate_kpis is not None:
         customdata=transport_df['percentage']
     )
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
     
     # 6. CUSTOM ANALYSIS (from your notebook)
     st.markdown('<h2 class="section-header">Custom Analysis</h2>', unsafe_allow_html=True)
@@ -1654,7 +1661,7 @@ if df is not None and accurate_kpis is not None:
         textfont=dict(size=10, color='#2c3e50'),
         hovertemplate='<b>%{y}</b><br>Total Tonnage: %{x:,.0f} tonnes<extra></extra>'
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
     
     # Port Efficiency Analysis (from your notebook) - Using FULL dataset for accuracy
     st.subheader("Port Efficiency Analysis")
@@ -1715,7 +1722,7 @@ if df is not None and accurate_kpis is not None:
         textfont=dict(size=10, color='#2c3e50'),
         hovertemplate='<b>%{y}</b><br>Average Value per Shipment: $%{x:,.0f}<extra></extra>'
     )
-    st.plotly_chart(fig1, use_container_width=True)
+    st.plotly_chart(fig1, width='stretch')
     
     # 2. LOWEST 15 VALUE PORTS (Interactive)
     lowest_15_value = significant_ports.nsmallest(15, 'avg_value_per_shipment')
@@ -1741,7 +1748,7 @@ if df is not None and accurate_kpis is not None:
         textfont=dict(size=10, color='#2c3e50'),
         hovertemplate='<b>%{y}</b><br>Average Value per Shipment: $%{x:,.0f}<extra></extra>'
     )
-    st.plotly_chart(fig2, use_container_width=True)
+    st.plotly_chart(fig2, width='stretch')
     
     # 8. REGIONAL ANALYSIS (EXACT from your notebook) - Using FULL dataset
     st.markdown('<h2 class="section-header">Regional Analysis</h2>', unsafe_allow_html=True)
@@ -1827,7 +1834,7 @@ if df is not None and accurate_kpis is not None:
         height=500
     )
     fig1.update_traces(textposition='inside', textinfo='percent+label')
-    st.plotly_chart(fig1, use_container_width=True)
+    st.plotly_chart(fig1, width='stretch')
     
     # 4.2 Regional Value Comparison Bar Chart (Interactive)
     fig2 = px.bar(regional_analysis, x='region', y='value_billions',
@@ -1851,7 +1858,7 @@ if df is not None and accurate_kpis is not None:
         textfont=dict(size=12, color='#2c3e50'),
         hovertemplate='<b>%{x}</b><br>Export Value: $%{y:.1f}B<extra></extra>'
     )
-    st.plotly_chart(fig2, use_container_width=True)
+    st.plotly_chart(fig2, width='stretch')
     
     # Clean dashboard - no unnecessary text
     
@@ -1906,7 +1913,7 @@ if df is not None and accurate_kpis is not None:
             textfont=dict(size=10, color='#2c3e50'),
             hovertemplate='<b>%{y}</b><br>YoY Growth: %{x:.1f}%<extra></extra>'
         )
-        st.plotly_chart(fig1, use_container_width=True)
+        st.plotly_chart(fig1, width='stretch')
         
         # 6.2 Top 15 Declining Markets (Interactive)
         top_declining = significant_countries.tail(15).reset_index()
@@ -1932,7 +1939,7 @@ if df is not None and accurate_kpis is not None:
             textfont=dict(size=10, color='#2c3e50'),
             hovertemplate='<b>%{y}</b><br>YoY Growth: %{x:.1f}%<extra></extra>'
         )
-        st.plotly_chart(fig2, use_container_width=True)
+        st.plotly_chart(fig2, width='stretch')
         
         # Clean dashboard - no unnecessary text
         
