@@ -22,17 +22,15 @@ jobs:
       run: |
         pip install -r requirements.txt
     
-    - name: Run data collection
+    - name: Run complete automation pipeline
       run: |
-        python 2024_2025_extractor.py
-    
-    - name: Run data cleaning
-      run: |
-        jupyter nbconvert --to notebook --execute data_cleaning.ipynb --output data_cleaning_executed.ipynb
-    
-    - name: Run data analysis
-      run: |
-        jupyter nbconvert --to notebook --execute data_analysis.ipynb --output data_analysis_executed.ipynb
+        python simple_automation.py
+      env:
+        # Email notifications will work if these are set as GitHub Secrets
+        SMTP_SERVER: ${{ secrets.SMTP_SERVER }}
+        SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
+        SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }}
+        RECIPIENT_EMAILS: ${{ secrets.RECIPIENT_EMAILS }}
     
     - name: Upload results
       uses: actions/upload-artifact@v3

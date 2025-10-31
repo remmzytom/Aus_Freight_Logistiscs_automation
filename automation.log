@@ -730,3 +730,39 @@ print(f"Total Weight: {df['gross_weight_tonnes'].sum():,.2f} tonnes")
 2025-10-28 12:49:44,127 - INFO - Duration: 0:04:57.990505
 2025-10-28 12:49:48,693 - INFO - Email sent successfully: Freight Logistics Automation - SUCCESS
 2025-10-28 12:49:48,694 - INFO - Success notification sent
+2025-10-31 11:18:54,846 - INFO - Simple Freight Logistics Automation Started
+2025-10-31 11:18:54,846 - INFO - Project Directory: C:\Cursor AI_projects\Aus_Freight_Logistic
+2025-10-31 11:18:54,846 - INFO - Starting Freight Logistics Automation
+2025-10-31 11:18:54,846 - INFO - Started at: 2025-10-31 11:18:54
+2025-10-31 11:18:54,846 - INFO - Force fresh data download - running extractor...
+2025-10-31 11:18:54,846 - INFO - Collecting fresh data from ABS website...
+2025-10-31 11:19:48,083 - INFO - Simple Freight Logistics Automation Started
+2025-10-31 11:19:48,083 - INFO - Project Directory: C:\Cursor AI_projects\Aus_Freight_Logistic
+2025-10-31 11:19:48,083 - INFO - Starting Freight Logistics Automation
+2025-10-31 11:19:48,083 - INFO - Started at: 2025-10-31 11:19:48
+2025-10-31 11:19:48,089 - INFO - Force fresh data download - running extractor...
+2025-10-31 11:19:48,089 - INFO - Collecting fresh data from ABS website...
+2025-10-31 11:20:14,016 - INFO - Data collection completed successfully
+2025-10-31 11:20:14,016 - INFO - Running data cleaning...
+2025-10-31 11:21:12,424 - INFO - Data collection completed successfully
+2025-10-31 11:21:12,424 - INFO - Running data cleaning...
+2025-10-31 11:22:50,816 - INFO - Data cleaning completed successfully
+2025-10-31 11:22:50,816 - INFO - Running data analysis...
+2025-10-31 11:24:33,416 - INFO - Data cleaning completed successfully
+2025-10-31 11:24:33,418 - INFO - Running data analysis...
+2025-10-31 11:24:52,138 - INFO - Data analysis completed successfully
+2025-10-31 11:24:52,138 - INFO - Updating dashboard...
+2025-10-31 11:24:52,138 - INFO - Dashboard updated successfully
+2025-10-31 11:24:52,138 - INFO - Dashboard available at: http://localhost:8501
+2025-10-31 11:24:52,138 - INFO - Automation completed successfully!
+2025-10-31 11:24:52,138 - INFO - Duration: 0:05:57.292485
+2025-10-31 11:24:56,432 - INFO - Email sent successfully: Freight Logistics Automation - SUCCESS
+2025-10-31 11:24:56,432 - INFO - Success notification sent
+2025-10-31 11:27:45,064 - INFO - Data analysis completed successfully
+2025-10-31 11:27:45,064 - INFO - Updating dashboard...
+2025-10-31 11:27:45,064 - INFO - Dashboard updated successfully
+2025-10-31 11:27:45,064 - INFO - Dashboard available at: http://localhost:8501
+2025-10-31 11:27:45,064 - INFO - Automation completed successfully!
+2025-10-31 11:27:45,064 - INFO - Duration: 0:07:56.975583
+2025-10-31 11:27:49,964 - INFO - Email sent successfully: Freight Logistics Automation - SUCCESS
+2025-10-31 11:27:49,964 - INFO - Success notification sent
