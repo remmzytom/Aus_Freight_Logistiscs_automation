@@ -411,12 +411,21 @@ def load_data():
         # Combine all chunks
         df_sample = pd.concat(chunk_list, ignore_index=True)
 
-        # Ensure product_description exists for filters/visuals (compat with different source names)
+        # Ensure product_description exists for filters/visuals (compat with different source names/casing)
+        import re
         if 'product_description' not in df_sample.columns:
-            for _col in ['product description', 'product', 'sitc', 'commodity', 'SITC description', 'sitc_description']:
-                if _col in df_sample.columns:
-                    df_sample['product_description'] = df_sample[_col].astype(str)
+            def _norm(s: str) -> str:
+                return re.sub(r"[^a-z0-9]", "", str(s).lower())
+            candidates = ['product_description', 'product description', 'product', 'sitc', 'commodity', 'sitc description', 'sitc_description']
+            norm_to_col = { _norm(c): c for c in df_sample.columns }
+            src = None
+            for cand in candidates:
+                key = _norm(cand)
+                if key in norm_to_col:
+                    src = norm_to_col[key]
                     break
+            if src:
+                df_sample['product_description'] = df_sample[src].astype(str)
             else:
                 df_sample['product_description'] = 'All Products'
         
@@ -440,10 +449,19 @@ with st.spinner('Loading data... This may take a moment for the full dataset.'):
 if df is not None and accurate_kpis is not None:
     # Final compatibility guard: ensure 'product_description' exists even if cached data is old
     if 'product_description' not in df.columns:
-        for _col in ['product description', 'product', 'sitc', 'commodity', 'SITC description', 'sitc_description']:
-            if _col in df.columns:
-                df['product_description'] = df[_col].astype(str)
+        import re
+        def _norm(s: str) -> str:
+            return re.sub(r"[^a-z0-9]", "", str(s).lower())
+        candidates = ['product_description', 'product description', 'product', 'sitc', 'commodity', 'sitc description', 'sitc_description']
+        norm_to_col = { _norm(c): c for c in df.columns }
+        src = None
+        for cand in candidates:
+            key = _norm(cand)
+            if key in norm_to_col:
+                src = norm_to_col[key]
                 break
+        if src:
+            df['product_description'] = df[src].astype(str)
         else:
             df['product_description'] = 'All Products'
     # Clean presentation - no status messages
