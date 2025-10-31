@@ -279,12 +279,64 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Load data function with accurate KPIs and fast dashboard
+def ensure_data_file() -> str:
+    """Ensure cleaned data file exists; if missing, generate it on the fly.
+    Returns the relative path to the cleaned CSV or raises an exception.
+    """
+    import os
+    os.makedirs('data', exist_ok=True)
+
+    cleaned_path = 'data/exports_cleaned.csv'
+    if os.path.exists(cleaned_path):
+        return cleaned_path
+
+    # Try to generate raw exports and produce a minimal cleaned file
+    extract_func = None
+    try:
+        import importlib.util, pathlib
+        extractor_path = pathlib.Path(__file__).parent / "2024_2025_extractor.py"
+        if extractor_path.exists():
+            spec = importlib.util.spec_from_file_location("extractor_module", str(extractor_path))
+            if spec and spec.loader:
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)  # type: ignore
+                extract_func = getattr(module, "extract_2024_2025", None)
+    except Exception:
+        extract_func = None
+
+    try:
+        df = extract_func() if callable(extract_func) else None
+    except Exception:
+        df = None
+
+    if df is None:
+        # As a fallback, try reading previously saved raw file
+        raw_path = 'data/exports_2024_2025.csv'
+        if os.path.exists(raw_path):
+            import pandas as pd
+            df = pd.read_csv(raw_path)
+
+    if df is None:
+        raise FileNotFoundError("No data available and automatic download failed")
+
+    # Minimal cleaning compatible with dashboard expectations
+    import pandas as pd
+    for col in ['quantity', 'gross_weight_tonnes', 'value_fob_aud']:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+    if 'month' in df.columns and 'year' not in df.columns:
+        df['year'] = df['month'].astype(str).str.extract(r'(\d{4})')
+
+    df.to_csv(cleaned_path, index=False)
+    return cleaned_path
+
+
 @st.cache_data(ttl=300)
 def load_data():
     """Load data with accurate KPIs and fast dashboard"""
     try:
-        # Use relative path for Streamlit Cloud compatibility
-        file_path = 'data/exports_cleaned.csv'
+        # Ensure the cleaned dataset exists (auto-generate on first deploy)
+        file_path = ensure_data_file()
         
         # Calculate accurate KPIs from full dataset (chunked)
         # Initialize KPI variables
