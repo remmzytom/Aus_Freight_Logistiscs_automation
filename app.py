@@ -374,32 +374,44 @@ def ensure_data_file() -> str:
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def load_exports_cleaned(path: str) -> pd.DataFrame:
-    """Read only needed columns, add compatibility shims, and downcast numerics to save RAM."""
-    preferred_columns = [
-        'year', 'month', 'month_number', 'country_of_destination', 'state_of_origin',
-        'value_fob_aud', 'gross_weight_tonnes', 'product_description',
-        'prod_descpt_code', 'sitc_code', 'port_of_loading'
-    ]
-
-    header = pd.read_csv(path, nrows=0)
-    usecols = [c for c in preferred_columns if c in header.columns]
-    df = pd.read_csv(path, usecols=usecols)
+    """Load all columns, add compatibility shims, and downcast numerics to save RAM."""
+    # Load all columns to avoid missing any that are needed by the dashboard
+    df = pd.read_csv(path)
 
     # Ensure month_number exists
     if 'month_number' not in df.columns and 'month' in df.columns:
-        month_map = {"Jan":1,"Feb":2,"Mar":3,"Apr":4,"May":5,"Jun":6,"Jul":7,"Aug":8,"Sep":9,"Oct":10,"Nov":11,"Dec":12,
-                     'January':1,'February':2,'March':3,'April':4,'May':5,'June':6,'July':7,'August':8,'September':9,'October':10,'November':11,'December':12}
-        df['month_number'] = df['month'].astype(str).str[:3].str.title().map({k[:3].title(): v for k, v in month_map.items() if isinstance(k, str)}).fillna(df.get('month_number'))
+        month_map = {
+            'January': 1, 'February': 2, 'March': 3, 'April': 4,
+            'May': 5, 'June': 6, 'July': 7, 'August': 8,
+            'September': 9, 'October': 10, 'November': 11, 'December': 12,
+            'Jan': 1, 'Feb': 2, 'Mar': 3, 'Apr': 4,
+            'May': 5, 'Jun': 6, 'Jul': 7, 'Aug': 8,
+            'Sep': 9, 'Oct': 10, 'Nov': 11, 'Dec': 12
+        }
+        # Extract month name from month column (format: "January 2024" or just "January")
+        df['month_name'] = df['month'].astype(str).str.split().str[0]
+        df['month_number'] = df['month_name'].map(month_map).fillna(1)
+        df = df.drop(columns=['month_name'], errors='ignore')
 
-    # Ensure product_description exists
+    # Ensure product_description exists (try multiple possible column names)
     if 'product_description' not in df.columns:
+        import re
         def _norm(s: str) -> str:
-            import re
             return re.sub(r"[^a-z0-9]", "", str(s).lower())
-        candidates = [c for c in df.columns if _norm(c) in {
-            'productdescription','product','description','sitc','sitcdescription','commodity'
-        }]
-        df['product_description'] = df[candidates[0]].astype(str) if candidates else 'All Products'
+        
+        # Try exact matches first, then fuzzy matches
+        candidates = []
+        for col in df.columns:
+            col_norm = _norm(col)
+            if col_norm in {'productdescription', 'product_description', 'sitc'}:
+                candidates.append(col)
+        
+        if candidates:
+            df['product_description'] = df[candidates[0]].astype(str)
+        else:
+            # Fallback: if still not found, check if we can use sitc_code or other columns
+            st.warning(f"Warning: 'product_description' column not found. Available columns: {list(df.columns)[:10]}...")
+            df['product_description'] = 'All Products'
 
     # Ensure code column exists for industry mapping
     if 'prod_descpt_code' not in df.columns and 'sitc_code' in df.columns:
