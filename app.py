@@ -410,6 +410,15 @@ def load_data():
         
         # Combine all chunks
         df_sample = pd.concat(chunk_list, ignore_index=True)
+
+        # Ensure product_description exists for filters/visuals (compat with different source names)
+        if 'product_description' not in df_sample.columns:
+            for _col in ['product description', 'product', 'sitc', 'commodity', 'SITC description', 'sitc_description']:
+                if _col in df_sample.columns:
+                    df_sample['product_description'] = df_sample[_col].astype(str)
+                    break
+            else:
+                df_sample['product_description'] = 'All Products'
         
         # Add calculated fields
         df_sample['date'] = pd.to_datetime(df_sample['year'].astype(str) + '-' + df_sample['month_number'].astype(str).str.zfill(2) + '-01')
