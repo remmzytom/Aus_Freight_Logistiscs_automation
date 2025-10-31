@@ -142,10 +142,11 @@ class SimpleAutomation:
             result = subprocess.run([
                 "jupyter", "nbconvert", 
                 "--execute", 
-                str(self.project_dir / "data_cleaning.ipynb"),
                 "--to", "notebook",
-                "--ExecutePreprocessor.timeout=600"
-            ], capture_output=True, text=True, cwd=str(self.project_dir))
+                "--ExecutePreprocessor.timeout=-1",
+                "--ExecutePreprocessor.allow_errors=False",
+                str(self.project_dir / "data_cleaning.ipynb")
+            ], capture_output=True, text=True, cwd=str(self.project_dir), env={**os.environ, "PYTHONUNBUFFERED": "1"})
             
             if result.returncode == 0:
                 logger.info("Data cleaning completed successfully")
@@ -166,10 +167,11 @@ class SimpleAutomation:
             result = subprocess.run([
                 "jupyter", "nbconvert", 
                 "--execute", 
-                str(self.project_dir / "data_analysis.ipynb"),
                 "--to", "notebook",
-                "--ExecutePreprocessor.timeout=600"
-            ], capture_output=True, text=True, cwd=str(self.project_dir))
+                "--ExecutePreprocessor.timeout=-1",
+                "--ExecutePreprocessor.allow_errors=False",
+                str(self.project_dir / "data_analysis.ipynb")
+            ], capture_output=True, text=True, cwd=str(self.project_dir), env={**os.environ, "PYTHONUNBUFFERED": "1"})
             
             if result.returncode == 0:
                 logger.info("Data analysis completed successfully")
