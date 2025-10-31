@@ -11,10 +11,10 @@ jobs:
     
     steps:
     - name: Checkout code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
     
     - name: Set up Python
-      uses: actions/setup-python@v3
+      uses: actions/setup-python@v5
       with:
         python-version: "3.9"
     
@@ -33,13 +33,13 @@ jobs:
         RECIPIENT_EMAILS: ${{ secrets.RECIPIENT_EMAILS }}
     
     - name: Upload results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: freight-data-results
         path: data/
     
     - name: Upload notebooks
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: executed-notebooks
         path: "*_executed.ipynb"

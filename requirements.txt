@@ -4,6 +4,8 @@ numpy
 matplotlib
 plotly
 jupyter
+nbconvert
 requests
 openpyxl
 xlrd
+schedule
