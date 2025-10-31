@@ -40,9 +40,11 @@ jobs:
     
     - name: Upload notebooks
       uses: actions/upload-artifact@v4
+      continue-on-error: true
       with:
         name: executed-notebooks
-        path: "*_executed.ipynb"
+        path: "*.nbconvert.ipynb"
+        if-no-files-found: ignore
     
     - name: Deploy to Streamlit Cloud
       run: |
