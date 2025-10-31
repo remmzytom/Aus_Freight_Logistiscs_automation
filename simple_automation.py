@@ -51,8 +51,8 @@ class SimpleAutomation:
             'sender_email': 'aremuakintomiwa@gmail.com',
             'sender_password': 'wjfb whfj lpsg yiju',
             'recipient_emails': [
-                'aremuakintomiwa@gmail.com',      # Your email
-                'manager@company.com'             # Manager's email (change this)
+                'aremuakintomiwa@gmail.com'     # Your email
+               # 'manager@company.com'             # Manager's email (change this)
             ]
         }
         
