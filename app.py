@@ -291,16 +291,31 @@ def ensure_data_file() -> str:
 
     cleaned_path = 'data/exports_cleaned.csv'
     
-    # Check if file exists and if it needs refresh (>30 days old)
+    # Check if file exists and if it needs refresh (>30 days old) or is missing required columns
+    needs_regeneration = False
     if os.path.exists(cleaned_path):
+        # Check file age
         file_age_days = (time.time() - os.path.getmtime(cleaned_path)) / (60 * 60 * 24)
         if file_age_days > 30:
-            # Data is stale - refresh it
             st.info(f"🔄 Data is {int(file_age_days)} days old. Refreshing from ABS website...")
-            # Fall through to regenerate below
+            needs_regeneration = True
         else:
-            # Data is fresh, return it
-            return cleaned_path
+            # Check if file has required columns (month_number might be missing from old files)
+            try:
+                import pandas as pd
+                sample_df = pd.read_csv(cleaned_path, nrows=1)
+                if 'month_number' not in sample_df.columns:
+                    st.info("🔄 Updating data format (adding missing columns)...")
+                    needs_regeneration = True
+                elif not needs_regeneration:
+                    # File exists, is fresh, and has required columns - return it
+                    return cleaned_path
+            except Exception:
+                # File might be corrupted, regenerate
+                needs_regeneration = True
+    else:
+        # File doesn't exist - need to generate
+        needs_regeneration = True
 
     # Try to generate raw exports and produce a minimal cleaned file
     extract_func = None
@@ -352,6 +367,7 @@ def ensure_data_file() -> str:
         df = df.drop(columns=['month_name'], errors='ignore')
 
     df.to_csv(cleaned_path, index=False)
+    st.success("✅ Data loaded and processed successfully!")
     return cleaned_path
 
 
