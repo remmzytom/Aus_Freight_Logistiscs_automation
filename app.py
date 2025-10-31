@@ -1301,6 +1301,12 @@ if df is not None and accurate_kpis is not None:
     df_full_volume_value['value_per_tonne'] = df_full_volume_value['value_fob_aud'] / df_full_volume_value['gross_weight_tonnes']
     
     # Add industry category to full dataset
+    # Ensure code column exists for this section as well
+    if 'prod_descpt_code' not in df_full_volume_value.columns:
+        if 'sitc_code' in df_full_volume_value.columns:
+            df_full_volume_value['prod_descpt_code'] = df_full_volume_value['sitc_code'].astype(str)
+        else:
+            df_full_volume_value['prod_descpt_code'] = ''
     def get_industry_category(sitc_code):
         if pd.isna(sitc_code) or sitc_code == '':
             return 'Other Commodities'
