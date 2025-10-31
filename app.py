@@ -470,6 +470,17 @@ except Exception as e:
     st.stop()
 
 if df is not None and accurate_kpis is not None:
+    # Helper function to safely execute sections
+    def safe_execute(func, section_name):
+        """Execute a function with error handling to prevent crashes."""
+        try:
+            func()
+            gc.collect()  # Clean up after each section
+        except Exception as e:
+            st.error(f"Error in {section_name}: {str(e)}")
+            import traceback
+            st.code(traceback.format_exc())
+    
     # Final compatibility guard: ensure 'product_description' exists even if cached data is old
     if 'product_description' not in df.columns:
         import re
@@ -655,114 +666,125 @@ if df is not None and accurate_kpis is not None:
         """, unsafe_allow_html=True)
     
     # 2. TIME SERIES ANALYSIS (from your notebook Cell 6)
-    st.markdown('<h2 class="section-header">Time Series Analysis</h2>', unsafe_allow_html=True)
-    
-    # Monthly trends (exact code from your notebook)
-    monthly = df_filtered.groupby(['year', 'month_number', 'month']).agg({
-        'value_fob_aud': 'sum',
-        'gross_weight_tonnes': 'sum'
-    }).reset_index().sort_values(['year', 'month_number'])
-    
-    # Check if we have data for the selected date range
-    if len(monthly) > 0:
-        monthly['period'] = monthly['month'] + ' ' + monthly['year'].astype(str)
-        monthly['value_per_tonne'] = monthly['value_fob_aud'] / monthly['gross_weight_tonnes']
+    try:
+        st.markdown('<h2 class="section-header">Time Series Analysis</h2>', unsafe_allow_html=True)
         
-        # Chart 1: Export Value Over Time (Interactive)
-        st.subheader("Monthly Export Value Trend")
-        
-        # Smart formatting for export values
-        def format_export_value(value):
-            if value >= 1e9:
-                return f"${value/1e9:.1f}B"
-            elif value >= 1e6:
-                return f"${value/1e6:.1f}M"
-            elif value >= 1e3:
-                return f"${value/1e3:.1f}K"
-            else:
-                return f"${value:,.0f}"
-        
-        fig1 = px.line(monthly, x='period', y=monthly['value_fob_aud'] / 1e9,
-                       title='Monthly Export Value Trend (2024-2025)',
-                       labels={'y': 'Export Value (Billion AUD)', 'x': 'Month'},
-                       markers=True,
-                       text=[format_export_value(value) for value in monthly['value_fob_aud']])
-        fig1.update_traces(line_color='#2E86AB', line_width=3, marker_size=8, textposition='top center')
-        fig1.update_layout(
-            title_font_size=16,
-            title_font_color='#2c3e50',
-            xaxis_title_font_size=14,
-            yaxis_title_font_size=14,
-            hovermode='x unified',
-            template='plotly_white',
-            yaxis=dict(tickformat='.1f')
-        )
-        fig1.update_xaxes(tickangle=45)
-        st.plotly_chart(fig1, width='stretch')
+        # Check required columns exist
+        required_cols = ['year', 'month_number', 'month', 'value_fob_aud', 'gross_weight_tonnes']
+        missing_cols = [col for col in required_cols if col not in df_filtered.columns]
+        if not missing_cols:
+            # Monthly trends (exact code from your notebook)
+            monthly = df_filtered.groupby(['year', 'month_number', 'month']).agg({
+                'value_fob_aud': 'sum',
+                'gross_weight_tonnes': 'sum'
+            }).reset_index().sort_values(['year', 'month_number'])
+            
+            # Check if we have data for the selected date range
+            if len(monthly) > 0:
+                monthly['period'] = monthly['month'] + ' ' + monthly['year'].astype(str)
+                monthly['value_per_tonne'] = monthly['value_fob_aud'] / monthly['gross_weight_tonnes']
+                
+                # Chart 1: Export Value Over Time (Interactive)
+                st.subheader("Monthly Export Value Trend")
+                
+                # Smart formatting for export values
+                def format_export_value(value):
+                    if value >= 1e9:
+                        return f"${value/1e9:.1f}B"
+                    elif value >= 1e6:
+                        return f"${value/1e6:.1f}M"
+                    elif value >= 1e3:
+                        return f"${value/1e3:.1f}K"
+                    else:
+                        return f"${value:,.0f}"
+                
+                fig1 = px.line(monthly, x='period', y=monthly['value_fob_aud'] / 1e9,
+                               title='Monthly Export Value Trend (2024-2025)',
+                               labels={'y': 'Export Value (Billion AUD)', 'x': 'Month'},
+                               markers=True,
+                               text=[format_export_value(value) for value in monthly['value_fob_aud']])
+                fig1.update_traces(line_color='#2E86AB', line_width=3, marker_size=8, textposition='top center')
+                fig1.update_layout(
+                    title_font_size=16,
+                    title_font_color='#2c3e50',
+                    xaxis_title_font_size=14,
+                    yaxis_title_font_size=14,
+                    hovermode='x unified',
+                    template='plotly_white',
+                    yaxis=dict(tickformat='.1f')
+                )
+                fig1.update_xaxes(tickangle=45)
+                st.plotly_chart(fig1, width='stretch')
 
-        # Chart 2: Export Weight Over Time (Interactive)
-        st.subheader("Monthly Export Weight Trend")
-        
-        # Smart formatting for weight values
-        def format_weight_value(value):
-            if value >= 1e9:
-                return f"{value/1e9:.1f}B"
-            elif value >= 1e6:
-                return f"{value/1e6:.1f}M"
-            elif value >= 1e3:
-                return f"{value/1e3:.1f}K"
-            else:
-                return f"{value:,.0f}"
-        
-        fig2 = px.line(monthly, x='period', y=monthly['gross_weight_tonnes'] / 1e6,
-                       title='Monthly Export Weight Trend (2024-2025)',
-                       labels={'y': 'Export Weight (Million Tonnes)', 'x': 'Month'},
-                       markers=True,
-                       text=[format_weight_value(value) for value in monthly['gross_weight_tonnes']])
-        fig2.update_traces(line_color='#F18F01', line_width=3, marker_size=8, marker_symbol='square', textposition='top center')
-        fig2.update_layout(
-            title_font_size=16,
-            title_font_color='#2c3e50',
-            xaxis_title_font_size=14,
-            yaxis_title_font_size=14,
-            hovermode='x unified',
-            template='plotly_white',
-            yaxis=dict(tickformat='.1f')
-        )
-        fig2.update_xaxes(tickangle=45)
-        st.plotly_chart(fig2, width='stretch')
+                # Chart 2: Export Weight Over Time (Interactive)
+                st.subheader("Monthly Export Weight Trend")
+                
+                # Smart formatting for weight values
+                def format_weight_value(value):
+                    if value >= 1e9:
+                        return f"{value/1e9:.1f}B"
+                    elif value >= 1e6:
+                        return f"{value/1e6:.1f}M"
+                    elif value >= 1e3:
+                        return f"{value/1e3:.1f}K"
+                    else:
+                        return f"{value:,.0f}"
+                
+                fig2 = px.line(monthly, x='period', y=monthly['gross_weight_tonnes'] / 1e6,
+                               title='Monthly Export Weight Trend (2024-2025)',
+                               labels={'y': 'Export Weight (Million Tonnes)', 'x': 'Month'},
+                               markers=True,
+                               text=[format_weight_value(value) for value in monthly['gross_weight_tonnes']])
+                fig2.update_traces(line_color='#F18F01', line_width=3, marker_size=8, marker_symbol='square', textposition='top center')
+                fig2.update_layout(
+                    title_font_size=16,
+                    title_font_color='#2c3e50',
+                    xaxis_title_font_size=14,
+                    yaxis_title_font_size=14,
+                    hovermode='x unified',
+                    template='plotly_white',
+                    yaxis=dict(tickformat='.1f')
+                )
+                fig2.update_xaxes(tickangle=45)
+                st.plotly_chart(fig2, width='stretch')
 
-        # Chart 3: Value per Tonne Over Time (Interactive) - KEY METRIC FOR LOGISTICS!
-        st.subheader("Average Value per Tonne Trend")
-        
-        # Smart formatting for value per tonne
-        def format_value_per_tonne(value):
-            if value >= 1e6:
-                return f"${value/1e6:.1f}M"
-            elif value >= 1e3:
-                return f"${value/1e3:.1f}K"
+                # Chart 3: Value per Tonne Over Time (Interactive) - KEY METRIC FOR LOGISTICS!
+                st.subheader("Average Value per Tonne Trend")
+                
+                # Smart formatting for value per tonne
+                def format_value_per_tonne(value):
+                    if value >= 1e6:
+                        return f"${value/1e6:.1f}M"
+                    elif value >= 1e3:
+                        return f"${value/1e3:.1f}K"
+                    else:
+                        return f"${value:,.0f}"
+                
+                fig3 = px.line(monthly, x='period', y=monthly['value_per_tonne'],
+                               title='Average Value per Tonne Trend (2024-2025)',
+                               labels={'y': 'Value per Tonne (AUD)', 'x': 'Month'},
+                               markers=True,
+                               text=[format_value_per_tonne(value) for value in monthly['value_per_tonne']])
+                fig3.update_traces(line_color='#06A77D', line_width=3, marker_size=8, marker_symbol='diamond', textposition='top center')
+                fig3.update_layout(
+                    title_font_size=16,
+                    title_font_color='#2c3e50',
+                    xaxis_title_font_size=14,
+                    yaxis_title_font_size=14,
+                    hovermode='x unified',
+                    template='plotly_white',
+                    yaxis=dict(tickformat=',.0f')
+                )
+                fig3.update_xaxes(tickangle=45)
+                st.plotly_chart(fig3, width='stretch')
             else:
-                return f"${value:,.0f}"
-        
-        fig3 = px.line(monthly, x='period', y=monthly['value_per_tonne'],
-                       title='Average Value per Tonne Trend (2024-2025)',
-                       labels={'y': 'Value per Tonne (AUD)', 'x': 'Month'},
-                       markers=True,
-                       text=[format_value_per_tonne(value) for value in monthly['value_per_tonne']])
-        fig3.update_traces(line_color='#06A77D', line_width=3, marker_size=8, marker_symbol='diamond', textposition='top center')
-        fig3.update_layout(
-            title_font_size=16,
-            title_font_color='#2c3e50',
-            xaxis_title_font_size=14,
-            yaxis_title_font_size=14,
-            hovermode='x unified',
-            template='plotly_white',
-            yaxis=dict(tickformat=',.0f')
-        )
-        fig3.update_xaxes(tickangle=45)
-        st.plotly_chart(fig3, width='stretch')
-    else:
-        st.warning("No data available for the selected date range. Please adjust your date filter.")
+                st.warning("No data available for the selected date range. Please adjust your date filter.")
+        else:
+            st.warning(f"Missing required columns for time series analysis: {missing_cols}")
+    except Exception as e:
+        st.error(f"Error in Time Series Analysis: {str(e)}")
+        import traceback
+        st.code(traceback.format_exc())
     
     # Clean up memory after time series section
     gc.collect()
