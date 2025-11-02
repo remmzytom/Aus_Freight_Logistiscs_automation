@@ -649,6 +649,297 @@ def load_section_data_chunked(file_path: str, section: str, filters: dict = None
             ])
             return df.sort_values('value_fob_aud', ascending=False)
         
+        elif section == 'industry_analysis':
+            # Aggregate by industry category
+            industry_data = {}
+            for chunk in pd.read_csv(file_path, chunksize=chunk_size, low_memory=False):
+                # Ensure prod_descpt_code exists
+                if 'prod_descpt_code' not in chunk.columns and 'sitc_code' in chunk.columns:
+                    chunk['prod_descpt_code'] = chunk['sitc_code'].astype(str)
+                elif 'prod_descpt_code' not in chunk.columns:
+                    chunk['prod_descpt_code'] = ''
+                
+                # Map to industry category
+                def get_industry_category(sitc_code):
+                    if pd.isna(sitc_code) or sitc_code == '':
+                        return 'Other Commodities'
+                    first_digit = str(sitc_code).strip()[0] if len(str(sitc_code).strip()) >= 1 else '9'
+                    mapping = {'0': 'Food & Agriculture', '1': 'Beverages & Tobacco', '2': 'Raw Materials & Mining', 
+                               '3': 'Energy & Petroleum', '4': 'Food Processing', '5': 'Chemicals & Pharmaceuticals',
+                               '6': 'Manufactured Goods and materials', '7': 'Machinery & Equipment', 
+                               '8': 'Consumer Goods', '9': 'Other Commodities'}
+                    return mapping.get(first_digit, 'Other Commodities')
+                
+                chunk['industry_category'] = chunk['prod_descpt_code'].apply(get_industry_category)
+                
+                grouped = chunk.groupby('industry_category').agg({
+                    'value_fob_aud': 'sum',
+                    'gross_weight_tonnes': 'sum'
+                }).reset_index()
+                
+                for _, row in grouped.iterrows():
+                    industry = row['industry_category']
+                    if industry not in industry_data:
+                        industry_data[industry] = {'value_fob_aud': 0, 'gross_weight_tonnes': 0}
+                    industry_data[industry]['value_fob_aud'] += row['value_fob_aud']
+                    industry_data[industry]['gross_weight_tonnes'] += row['gross_weight_tonnes']
+                
+                del chunk
+                gc.collect()
+            
+            df = pd.DataFrame([
+                {'industry_category': k, 'value_fob_aud': v['value_fob_aud'], 
+                 'gross_weight_tonnes': v['gross_weight_tonnes']}
+                for k, v in industry_data.items()
+            ])
+            if len(df) > 0:
+                df['value_per_tonne'] = df['value_fob_aud'] / df['gross_weight_tonnes']
+            return df.sort_values('value_fob_aud', ascending=False)
+        
+        elif section == 'state_analysis':
+            # Aggregate by state
+            state_data = {}
+            for chunk in pd.read_csv(file_path, chunksize=chunk_size, low_memory=False):
+                if 'state_of_origin' in chunk.columns:
+                    grouped = chunk.groupby('state_of_origin').agg({
+                        'value_fob_aud': 'sum'
+                    }).reset_index()
+                    
+                    for _, row in grouped.iterrows():
+                        state = row['state_of_origin']
+                        if state not in state_data:
+                            state_data[state] = {'value_fob_aud': 0}
+                        state_data[state]['value_fob_aud'] += row['value_fob_aud']
+                
+                del chunk
+                gc.collect()
+            
+            df = pd.DataFrame([
+                {'state_of_origin': k, 'value_fob_aud': v['value_fob_aud']}
+                for k, v in state_data.items()
+            ])
+            return df.sort_values('value_fob_aud', ascending=False)
+        
+        elif section == 'transport_analysis':
+            # Aggregate by transport mode
+            transport_data = {}
+            for chunk in pd.read_csv(file_path, chunksize=chunk_size, low_memory=False):
+                if 'mode_of_transport' in chunk.columns:
+                    grouped = chunk.groupby('mode_of_transport').agg({
+                        'value_fob_aud': 'sum'
+                    }).reset_index()
+                    
+                    for _, row in grouped.iterrows():
+                        transport = row['mode_of_transport']
+                        if transport not in transport_data:
+                            transport_data[transport] = {'value_fob_aud': 0}
+                        transport_data[transport]['value_fob_aud'] += row['value_fob_aud']
+                
+                del chunk
+                gc.collect()
+            
+            df = pd.DataFrame([
+                {'mode_of_transport': k, 'value_fob_aud': v['value_fob_aud']}
+                for k, v in transport_data.items()
+            ])
+            return df.sort_values('value_fob_aud', ascending=False)
+        
+        elif section == 'port_analysis':
+            # Aggregate by port
+            port_data = {}
+            for chunk in pd.read_csv(file_path, chunksize=chunk_size, low_memory=False):
+                if 'port_of_loading' in chunk.columns:
+                    grouped = chunk.groupby('port_of_loading').agg({
+                        'value_fob_aud': 'sum',
+                        'gross_weight_tonnes': 'sum'
+                    }).reset_index()
+                    
+                    # Count shipments by port
+                    port_counts = chunk.groupby('port_of_loading').size()
+                    for port, count in port_counts.items():
+                        if port not in port_data:
+                            port_data[port] = {'value_fob_aud': 0, 'gross_weight_tonnes': 0, 'shipment_count': 0}
+                        port_data[port]['shipment_count'] += count
+                    
+                    for _, row in grouped.iterrows():
+                        port = row['port_of_loading']
+                        if port not in port_data:
+                            port_data[port] = {'value_fob_aud': 0, 'gross_weight_tonnes': 0, 'shipment_count': 0}
+                        port_data[port]['value_fob_aud'] += row['value_fob_aud']
+                        port_data[port]['gross_weight_tonnes'] += row['gross_weight_tonnes']
+                
+                del chunk
+                gc.collect()
+            
+            df = pd.DataFrame([
+                {'port_of_loading': k, 'value_fob_aud': v['value_fob_aud'], 
+                 'gross_weight_tonnes': v['gross_weight_tonnes'], 'shipment_count': v['shipment_count']}
+                for k, v in port_data.items()
+            ])
+            if len(df) > 0:
+                df['avg_value_per_shipment'] = df['value_fob_aud'] / df['shipment_count']
+            return df.sort_values('gross_weight_tonnes', ascending=False)
+        
+        elif section == 'regional_analysis':
+            # Aggregate by region
+            regional_data = {}
+            for chunk in pd.read_csv(file_path, chunksize=chunk_size, low_memory=False):
+                if 'country_of_destination' in chunk.columns:
+                    # Map country to region
+                    try:
+                        from region_mapping import add_region_to_dataframe
+                        chunk = add_region_to_dataframe(chunk, 'country_of_destination', 'region')
+                    except ImportError:
+                        def get_region(country):
+                            asia_pacific = ['China', 'Japan', 'Korea, Republic of (South)', 'Singapore', 'India', 'Taiwan', 
+                                           'Indonesia', 'Malaysia', 'Hong Kong', 'Vietnam', 'Thailand', 'Philippines']
+                            europe = ['United Kingdom, Channel Islands and Isle of Man, nfd', 'Germany', 'France', 'Italy']
+                            americas = ['United States of America', 'Canada', 'Brazil', 'Mexico']
+                            middle_east = ['United Arab Emirates', 'Saudi Arabia', 'Turkey']
+                            
+                            if country in asia_pacific:
+                                return 'Asia-Pacific'
+                            elif country in europe:
+                                return 'Europe'
+                            elif country in americas:
+                                return 'Americas'
+                            elif country in middle_east:
+                                return 'Middle East'
+                            else:
+                                return 'Other'
+                        chunk['region'] = chunk['country_of_destination'].apply(get_region)
+                    
+                    grouped = chunk.groupby('region').agg({
+                        'value_fob_aud': 'sum'
+                    }).reset_index()
+                    
+                    for _, row in grouped.iterrows():
+                        region = row['region']
+                        if region not in regional_data:
+                            regional_data[region] = {'value_fob_aud': 0}
+                        regional_data[region]['value_fob_aud'] += row['value_fob_aud']
+                
+                del chunk
+                gc.collect()
+            
+            df = pd.DataFrame([
+                {'region': k, 'value_fob_aud': v['value_fob_aud']}
+                for k, v in regional_data.items()
+            ])
+            if len(df) > 0:
+                total_value = df['value_fob_aud'].sum()
+                df['market_share_pct'] = (df['value_fob_aud'] / total_value * 100)
+            return df.sort_values('value_fob_aud', ascending=False)
+        
+        elif section == 'product_market_analysis':
+            # Aggregate product-country combinations
+            product_country_data = {}
+            product_data = {}
+            country_data = {}
+            
+            for chunk in pd.read_csv(file_path, chunksize=chunk_size, low_memory=False):
+                # Ensure product_description exists
+                if 'product_description' not in chunk.columns:
+                    import re
+                    def _norm(s): return re.sub(r"[^a-z0-9]", "", str(s).lower())
+                    candidates = [c for c in chunk.columns if _norm(c) in {'productdescription', 'product_description', 'sitc'}]
+                    if candidates:
+                        chunk['product_description'] = chunk[candidates[0]].astype(str)
+                    else:
+                        chunk['product_description'] = 'All Products'
+                
+                # Products
+                if 'product_description' in chunk.columns:
+                    grouped_products = chunk.groupby('product_description').agg({
+                        'value_fob_aud': 'sum',
+                        'gross_weight_tonnes': 'sum',
+                        'country_of_destination': 'nunique'
+                    }).reset_index()
+                    for _, row in grouped_products.iterrows():
+                        product = row['product_description']
+                        if product not in product_data:
+                            product_data[product] = {'value_fob_aud': 0, 'gross_weight_tonnes': 0, 'countries_served': 0}
+                        product_data[product]['value_fob_aud'] += row['value_fob_aud']
+                        product_data[product]['gross_weight_tonnes'] += row['gross_weight_tonnes']
+                        product_data[product]['countries_served'] = max(product_data[product]['countries_served'], row['country_of_destination'])
+                
+                # Countries
+                if 'country_of_destination' in chunk.columns:
+                    grouped_countries = chunk.groupby('country_of_destination').agg({
+                        'value_fob_aud': 'sum',
+                        'gross_weight_tonnes': 'sum',
+                        'product_description': 'nunique'
+                    }).reset_index()
+                    for _, row in grouped_countries.iterrows():
+                        country = row['country_of_destination']
+                        if country not in country_data:
+                            country_data[country] = {'value_fob_aud': 0, 'gross_weight_tonnes': 0, 'products_imported': 0}
+                        country_data[country]['value_fob_aud'] += row['value_fob_aud']
+                        country_data[country]['gross_weight_tonnes'] += row['gross_weight_tonnes']
+                        country_data[country]['products_imported'] = max(country_data[country]['products_imported'], row['product_description'])
+                
+                del chunk
+                gc.collect()
+            
+            return {
+                'products': pd.DataFrame([
+                    {'product_description': k, 'value_fob_aud': v['value_fob_aud'], 
+                     'gross_weight_tonnes': v['gross_weight_tonnes'], 'countries_served': v['countries_served']}
+                    for k, v in product_data.items()
+                ]).sort_values('value_fob_aud', ascending=False),
+                'countries': pd.DataFrame([
+                    {'country_of_destination': k, 'value_fob_aud': v['value_fob_aud'], 
+                     'gross_weight_tonnes': v['gross_weight_tonnes'], 'products_imported': v['products_imported']}
+                    for k, v in country_data.items()
+                ]).sort_values('value_fob_aud', ascending=False)
+            }
+        
+        elif section == 'growing_declining_markets':
+            # Q1 comparison by country
+            country_yearly_data = {}
+            q1_months = ['January', 'February', 'March', 'April']
+            
+            for chunk in pd.read_csv(file_path, chunksize=chunk_size, low_memory=False):
+                # Filter Q1 months
+                if 'month' in chunk.columns:
+                    chunk_q1 = chunk[chunk['month'].isin(q1_months)]
+                else:
+                    chunk_q1 = chunk
+                
+                if 'country_of_destination' in chunk_q1.columns and 'year' in chunk_q1.columns:
+                    grouped = chunk_q1.groupby(['country_of_destination', 'year']).agg({
+                        'value_fob_aud': 'sum'
+                    }).reset_index()
+                    
+                    for _, row in grouped.iterrows():
+                        country = row['country_of_destination']
+                        year = row['year']
+                        if country not in country_yearly_data:
+                            country_yearly_data[country] = {2024: 0, 2025: 0}
+                        if year in country_yearly_data[country]:
+                            country_yearly_data[country][year] += row['value_fob_aud']
+                
+                del chunk, chunk_q1
+                gc.collect()
+            
+            # Calculate growth
+            growth_data = []
+            for country, years in country_yearly_data.items():
+                val_2024 = years.get(2024, 0)
+                val_2025 = years.get(2025, 0)
+                if val_2024 >= 1e8:  # At least $100M in 2024
+                    growth_pct = ((val_2025 - val_2024) / val_2024 * 100) if val_2024 > 0 else 0
+                    growth_data.append({
+                        'country_of_destination': country,
+                        'Q1_2024_Value': val_2024 / 1e9,
+                        'Q1_2025_Value': val_2025 / 1e9,
+                        'YoY_Growth_%': growth_pct,
+                        'YoY_Growth_Absolute': (val_2025 - val_2024) / 1e9
+                    })
+            
+            df = pd.DataFrame(growth_data)
+            return df.sort_values('YoY_Growth_%', ascending=False)
+        
         # Default: return empty for unsupported sections
         return pd.DataFrame()
         
@@ -1136,21 +1427,399 @@ if accurate_kpis is not None:
     
     st.plotly_chart(fig)
     
-    # 4.5. INDUSTRY CATEGORY ANALYSIS and remaining sections - Being optimized for lazy loading
+    # 4.5. INDUSTRY CATEGORY ANALYSIS - Lazy loaded
     try:
-        # These sections still need full dataset - temporarily disabled for memory optimization
-        st.markdown('<h2 class="section-header">Additional Analysis Sections</h2>', unsafe_allow_html=True)
-        st.info("Industry Analysis, State Analysis, Transport Analysis, Port Analysis, Regional Analysis, and other sections are being optimized for lazy loading. Time Series, Country, and Product analyses are fully functional above!")
+        st.markdown('<h2 class="section-header">Industry Category Analysis</h2>', unsafe_allow_html=True)
         
-        # TODO: Implement lazy loading for:
-        # - Industry Category Analysis
-        # - Product-Market Analysis  
-        # - Port Analysis
-        # - State & Transport Analysis
-        # - Regional Analysis
-        # - Growing & Declining Markets
+        with st.spinner('Loading industry analysis data...'):
+            industry_df = load_section_data_chunked(file_path, 'industry_analysis', filters)
+        
+        if len(industry_df) > 0:
+            industry_df['Value_Percentage'] = (industry_df['value_fob_aud'] / industry_df['value_fob_aud'].sum() * 100).round(1)
+            industry_df['value_billions'] = industry_df['value_fob_aud'] / 1e9
+            
+            # Top industries chart
+            top_industries = industry_df.head(8).reset_index()
+            
+            fig1 = px.bar(top_industries, x='value_billions', y='industry_category',
+                         orientation='h',
+                         title='Australian Export Value by Industry Category',
+                         labels={'value_billions': 'Export Value (Billion AUD)', 'industry_category': 'Industry'},
+                         color='value_billions',
+                         color_continuous_scale='viridis')
+            fig1.update_traces(
+                text=[f"${value:.1f}B<br>({pct:.1f}%)" for value, pct in zip(top_industries['value_billions'], top_industries['Value_Percentage'])],
+                textposition='outside'
+            )
+            fig1.update_layout(
+                title_font_size=16,
+                title_font_color='#2c3e50',
+                xaxis_title_font_size=14,
+                yaxis_title_font_size=14,
+                template='plotly_white',
+                height=600,
+                showlegend=False
+            )
+            fig1.update_yaxes(autorange="reversed")
+            fig1.update_xaxes(tickformat='$,.1f')
+            st.plotly_chart(fig1)
+            
+            # Value density chart
+            industry_df['Value_per_Tonne_Ratio'] = industry_df['value_fob_aud'] / industry_df['gross_weight_tonnes']
+            value_density = industry_df.sort_values('Value_per_Tonne_Ratio', ascending=False).reset_index()
+            
+            st.subheader("Industry Value Density (Value per Tonne Shipped)")
+            fig2 = px.bar(value_density, x='industry_category', y='Value_per_Tonne_Ratio',
+                         title='Industry Value Density (Value per Tonne Shipped)',
+                         labels={'Value_per_Tonne_Ratio': 'Value per Tonne (AUD)', 'industry_category': 'Industry'},
+                         color='Value_per_Tonne_Ratio',
+                         color_continuous_scale='viridis')
+            fig2.update_traces(
+                text=[f"${value:,.0f}/tonne" for value in value_density['Value_per_Tonne_Ratio']],
+                textposition='outside'
+            )
+            fig2.update_layout(
+                title_font_size=16,
+                title_font_color='#2c3e50',
+                xaxis_title_font_size=14,
+                yaxis_title_font_size=14,
+                template='plotly_white',
+                height=600,
+                showlegend=False
+            )
+            fig2.update_xaxes(tickangle=45)
+            fig2.update_yaxes(tickformat='$,.0f')
+            st.plotly_chart(fig2)
+            
+        gc.collect()
     except Exception as e:
-        pass  # Silently continue
+        st.error(f"Error in Industry Analysis: {str(e)}")
+        import traceback
+        st.code(traceback.format_exc())
+    
+    # 4.6. PRODUCT-MARKET ANALYSIS - Lazy loaded
+    try:
+        st.markdown('<h2 class="section-header">Product-Market Analysis</h2>', unsafe_allow_html=True)
+        
+        with st.spinner('Loading product-market analysis data...'):
+            pm_data = load_section_data_chunked(file_path, 'product_market_analysis', filters)
+        
+        if isinstance(pm_data, dict) and 'products' in pm_data and 'countries' in pm_data:
+            top_products_pm = pm_data['products'].head(10)
+            top_countries_pm = pm_data['countries'].head(10)
+            
+            # Top products
+            st.subheader("Top 10 Export Products by Value")
+            fig1 = px.bar(top_products_pm, x='value_fob_aud', y='product_description',
+                         orientation='h',
+                         title='TOP 10 EXPORT PRODUCTS BY VALUE',
+                         labels={'value_fob_aud': 'Export Value (AUD)', 'product_description': 'Product'},
+                         color='value_fob_aud',
+                         color_continuous_scale='viridis')
+            fig1.update_layout(
+                title_font_size=16,
+                title_font_color='#2c3e50',
+                xaxis_title_font_size=14,
+                yaxis_title_font_size=14,
+                template='plotly_white',
+                height=600
+            )
+            fig1.update_yaxes(autorange="reversed")
+            fig1.update_xaxes(tickformat='$,.0f')
+            st.plotly_chart(fig1)
+            
+            # Top countries
+            st.subheader("Top 10 Destination Countries")
+            fig2 = px.bar(top_countries_pm, x='value_fob_aud', y='country_of_destination',
+                         orientation='h',
+                         title='TOP 10 DESTINATION COUNTRIES',
+                         labels={'value_fob_aud': 'Import Value (AUD)', 'country_of_destination': 'Country'},
+                         color='value_fob_aud',
+                         color_continuous_scale='plasma')
+            fig2.update_traces(
+                text=[f"${value/1e9:.1f}B" for value in top_countries_pm['value_fob_aud']],
+                textposition='outside'
+            )
+            fig2.update_layout(
+                title_font_size=16,
+                title_font_color='#2c3e50',
+                xaxis_title_font_size=14,
+                yaxis_title_font_size=14,
+                template='plotly_white',
+                height=600
+            )
+            fig2.update_yaxes(autorange="reversed")
+            fig2.update_xaxes(tickformat='$,.0f')
+            st.plotly_chart(fig2)
+            
+        gc.collect()
+    except Exception as e:
+        st.error(f"Error in Product-Market Analysis: {str(e)}")
+        import traceback
+        st.code(traceback.format_exc())
+    
+    # 4.7. PORT ANALYSIS - Lazy loaded
+    try:
+        st.markdown('<h2 class="section-header">Port Analysis</h2>', unsafe_allow_html=True)
+        
+        with st.spinner('Loading port analysis data...'):
+            port_df = load_section_data_chunked(file_path, 'port_analysis', filters)
+        
+        if len(port_df) > 0:
+            # Top ports by tonnage
+            top_15_ports = port_df.head(15).reset_index()
+            top_15_ports['tonnage_millions'] = top_15_ports['gross_weight_tonnes'] / 1e6
+            
+            st.subheader("Top 15 Ports by Tonnage")
+            fig = px.bar(top_15_ports, x='tonnage_millions', y='port_of_loading',
+                        orientation='h',
+                        title='TOP 15 PORTS BY TONNAGE',
+                        labels={'tonnage_millions': 'Tonnage (Million Tonnes)', 'port_of_loading': 'Port'},
+                        color='tonnage_millions',
+                        color_continuous_scale='viridis')
+            fig.update_traces(
+                text=[f"{value:.1f}M" for value in top_15_ports['tonnage_millions']],
+                textposition='outside'
+            )
+            fig.update_layout(
+                title_font_size=16,
+                title_font_color='#2c3e50',
+                xaxis_title_font_size=14,
+                yaxis_title_font_size=14,
+                template='plotly_white',
+                height=600
+            )
+            fig.update_yaxes(autorange="reversed")
+            fig.update_xaxes(tickformat=',.1f')
+            st.plotly_chart(fig)
+            
+            # Port efficiency
+            significant_ports = port_df[port_df['shipment_count'] >= 50].copy()
+            significant_ports = significant_ports.sort_values('avg_value_per_shipment', ascending=False)
+            
+            if len(significant_ports) > 0:
+                st.subheader("Port Value Visualizations")
+                
+                top_15_high_value = significant_ports.head(15)
+                def format_short_value(value):
+                    if value >= 1e6:
+                        return f"${value/1e6:.1f}M"
+                    elif value >= 1e3:
+                        return f"${value/1e3:.1f}K"
+                    else:
+                        return f"${value:.0f}"
+                
+                fig1 = px.bar(top_15_high_value, x='avg_value_per_shipment', y='port_of_loading',
+                             orientation='h',
+                             title='TOP 15 HIGH-VALUE PORTS (Average Value per Shipment)',
+                             labels={'avg_value_per_shipment': 'Average Value per Shipment ($)', 'port_of_loading': 'Port'},
+                             color='avg_value_per_shipment',
+                             color_continuous_scale='Greens',
+                             text=[format_short_value(value) for value in top_15_high_value['avg_value_per_shipment']])
+                fig1.update_layout(
+                    title_font_size=16,
+                    title_font_color='#2c3e50',
+                    xaxis_title_font_size=14,
+                    yaxis_title_font_size=14,
+                    template='plotly_white',
+                    height=600
+                )
+                fig1.update_yaxes(autorange="reversed")
+                fig1.update_xaxes(tickformat='$,.0f')
+                fig1.update_traces(textposition='outside')
+                st.plotly_chart(fig1)
+            
+        gc.collect()
+    except Exception as e:
+        st.error(f"Error in Port Analysis: {str(e)}")
+        import traceback
+        st.code(traceback.format_exc())
+    
+    # 5. STATE & TRANSPORT ANALYSIS - Lazy loaded
+    try:
+        st.markdown('<h2 class="section-header">State & Transport Analysis</h2>', unsafe_allow_html=True)
+        
+        # State Analysis
+        with st.spinner('Loading state analysis data...'):
+            state_df = load_section_data_chunked(file_path, 'state_analysis', filters)
+        
+        if len(state_df) > 0:
+            state_df['value_billions'] = state_df['value_fob_aud'] / 1e9
+            state_df['percentage'] = (state_df['value_fob_aud'] / state_df['value_fob_aud'].sum() * 100).round(1)
+            
+            st.subheader("Export Value by State")
+            fig = px.bar(state_df, x='value_billions', y='state_of_origin',
+                        orientation='h',
+                        title='Export Value by State (2024-2025)',
+                        labels={'value_billions': 'Export Value (Billion AUD)', 'state_of_origin': 'State'},
+                        color='value_billions',
+                        color_continuous_scale='viridis')
+            fig.update_traces(
+                text=[f"${value:.1f}B<br>({pct:.1f}%)" for value, pct in zip(state_df['value_billions'], state_df['percentage'])],
+                textposition='outside'
+            )
+            fig.update_layout(
+                title_font_size=16,
+                title_font_color='#2c3e50',
+                xaxis_title_font_size=14,
+                yaxis_title_font_size=14,
+                template='plotly_white',
+                height=500,
+                showlegend=False
+            )
+            fig.update_yaxes(autorange="reversed")
+            fig.update_xaxes(tickformat='$,.1f')
+            st.plotly_chart(fig)
+        
+        # Transport Analysis
+        with st.spinner('Loading transport analysis data...'):
+            transport_df = load_section_data_chunked(file_path, 'transport_analysis', filters)
+        
+        if len(transport_df) > 0:
+            transport_df['value_billions'] = transport_df['value_fob_aud'] / 1e9
+            transport_df['percentage'] = (transport_df['value_fob_aud'] / transport_df['value_fob_aud'].sum() * 100).round(1)
+            
+            st.subheader("Export Value by Transport Mode")
+            fig = px.bar(transport_df, x='mode_of_transport', y='value_billions',
+                        title='Export Value by Transport Mode (2024-2025)',
+                        labels={'value_billions': 'Export Value (Billion AUD)', 'mode_of_transport': 'Transport Mode'},
+                        color='value_billions',
+                        color_continuous_scale='viridis')
+            fig.update_traces(
+                text=[f"${value:.1f}B<br>({pct:.1f}%)" for value, pct in zip(transport_df['value_billions'], transport_df['percentage'])],
+                textposition='outside'
+            )
+            fig.update_layout(
+                title_font_size=16,
+                title_font_color='#2c3e50',
+                xaxis_title_font_size=14,
+                yaxis_title_font_size=14,
+                template='plotly_white',
+                height=500,
+                showlegend=False
+            )
+            fig.update_xaxes(tickangle=15)
+            fig.update_yaxes(tickformat='$,.1f')
+            st.plotly_chart(fig)
+        
+        gc.collect()
+    except Exception as e:
+        st.error(f"Error in State & Transport Analysis: {str(e)}")
+        import traceback
+        st.code(traceback.format_exc())
+    
+    # 6. REGIONAL ANALYSIS - Lazy loaded
+    try:
+        st.markdown('<h2 class="section-header">Regional Analysis</h2>', unsafe_allow_html=True)
+        
+        with st.spinner('Loading regional analysis data...'):
+            regional_df = load_section_data_chunked(file_path, 'regional_analysis', filters)
+        
+        if len(regional_df) > 0:
+            regional_df['value_billions'] = regional_df['value_fob_aud'] / 1e9
+            
+            # Pie chart
+            st.subheader("Regional Market Share")
+            fig1 = px.pie(regional_df, values='market_share_pct', names='region',
+                         title='Australian Export Share by Region',
+                         color_discrete_sequence=px.colors.qualitative.Set3)
+            fig1.update_layout(
+                title_font_size=16,
+                title_font_color='#2c3e50',
+                template='plotly_white',
+                height=500
+            )
+            fig1.update_traces(textposition='inside', textinfo='percent+label')
+            st.plotly_chart(fig1)
+            
+            # Bar chart
+            st.subheader("Regional Value Comparison")
+            fig2 = px.bar(regional_df, x='region', y='value_billions',
+                         title='Export Value by Region (Billions AUD)',
+                         labels={'value_billions': 'Export Value (Billions AUD)', 'region': 'Region'},
+                         color='value_billions',
+                         color_continuous_scale='viridis',
+                         text=[f"${value:.1f}B" for value in regional_df['value_billions']])
+            fig2.update_layout(
+                title_font_size=16,
+                title_font_color='#2c3e50',
+                xaxis_title_font_size=14,
+                yaxis_title_font_size=14,
+                template='plotly_white',
+                height=500
+            )
+            fig2.update_xaxes(tickangle=45)
+            fig2.update_yaxes(tickformat='$,.1f')
+            fig2.update_traces(textposition='outside')
+            st.plotly_chart(fig2)
+            
+        gc.collect()
+    except Exception as e:
+        st.error(f"Error in Regional Analysis: {str(e)}")
+        import traceback
+        st.code(traceback.format_exc())
+    
+    # 7. GROWING & DECLINING MARKETS - Lazy loaded
+    try:
+        st.markdown('<h2 class="section-header">Growing & Declining Markets Analysis</h2>', unsafe_allow_html=True)
+        
+        with st.spinner('Loading growth analysis data...'):
+            growth_df = load_section_data_chunked(file_path, 'growing_declining_markets', filters)
+        
+        if len(growth_df) > 0:
+            # Top growing markets
+            top_growing = growth_df.head(15).reset_index()
+            
+            st.subheader("Top 15 Growing Markets (Q1 2024 → Q1 2025)")
+            fig1 = px.bar(top_growing, x='YoY_Growth_%', y='country_of_destination',
+                         orientation='h',
+                         title='Top 15 Growing Markets (Q1 2024 → Q1 2025)',
+                         labels={'YoY_Growth_%': 'YoY Growth (%)', 'country_of_destination': 'Country'},
+                         color='YoY_Growth_%',
+                         color_continuous_scale='viridis',
+                         text=[f"{value:.1f}%" for value in top_growing['YoY_Growth_%']])
+            fig1.update_layout(
+                title_font_size=16,
+                title_font_color='#2c3e50',
+                xaxis_title_font_size=14,
+                yaxis_title_font_size=14,
+                template='plotly_white',
+                height=600
+            )
+            fig1.update_yaxes(autorange="reversed")
+            fig1.add_vline(x=0, line_dash="dash", line_color="black", opacity=0.3)
+            fig1.update_traces(textposition='outside')
+            st.plotly_chart(fig1)
+            
+            # Top declining markets
+            top_declining = growth_df.tail(15).reset_index()
+            
+            st.subheader("Top 15 Declining Markets (Q1 2024 → Q1 2025)")
+            fig2 = px.bar(top_declining, x='YoY_Growth_%', y='country_of_destination',
+                         orientation='h',
+                         title='Top 15 Declining Markets (Q1 2024 → Q1 2025)',
+                         labels={'YoY_Growth_%': 'YoY Growth (%)', 'country_of_destination': 'Country'},
+                         color='YoY_Growth_%',
+                         color_continuous_scale='plasma',
+                         text=[f"{value:.1f}%" for value in top_declining['YoY_Growth_%']])
+            fig2.update_layout(
+                title_font_size=16,
+                title_font_color='#2c3e50',
+                xaxis_title_font_size=14,
+                yaxis_title_font_size=14,
+                template='plotly_white',
+                height=600
+            )
+            fig2.update_yaxes(autorange="reversed")
+            fig2.add_vline(x=0, line_dash="dash", line_color="black", opacity=0.3)
+            fig2.update_traces(textposition='outside')
+            st.plotly_chart(fig2)
+            
+        gc.collect()
+    except Exception as e:
+        st.error(f"Error in Growing & Declining Markets Analysis: {str(e)}")
+        import traceback
+        st.code(traceback.format_exc())
     
     # Footer - Show footer
     st.markdown("---")
