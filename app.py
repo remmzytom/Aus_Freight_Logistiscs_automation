@@ -952,6 +952,107 @@ def load_section_data_chunked(file_path: str, section: str, filters: dict = None
             
             return df
         
+        elif section == 'volume_value_analysis':
+            # Volume vs Value Analysis by product
+            product_data = {}
+            
+            for chunk in pd.read_csv(file_path, chunksize=chunk_size, low_memory=False):
+                # Ensure product_description exists
+                if 'product_description' not in chunk.columns:
+                    import re
+                    def _norm(s): return re.sub(r"[^a-z0-9]", "", str(s).lower())
+                    candidates = [c for c in chunk.columns if _norm(c) in {'productdescription', 'product_description', 'sitc'}]
+                    if candidates:
+                        chunk['product_description'] = chunk[candidates[0]].astype(str)
+                    else:
+                        chunk['product_description'] = 'All Products'
+                
+                # Ensure prod_descpt_code exists for industry category
+                if 'prod_descpt_code' not in chunk.columns and 'sitc_code' in chunk.columns:
+                    chunk['prod_descpt_code'] = chunk['sitc_code'].astype(str)
+                elif 'prod_descpt_code' not in chunk.columns:
+                    chunk['prod_descpt_code'] = ''
+                
+                # Map to industry category
+                def get_industry_category(sitc_code):
+                    if pd.isna(sitc_code) or sitc_code == '':
+                        return 'Other Commodities'
+                    first_digit = str(sitc_code).strip()[0] if len(str(sitc_code).strip()) >= 1 else '9'
+                    mapping = {'0': 'Food & Agriculture', '1': 'Beverages & Tobacco', '2': 'Raw Materials & Mining', 
+                               '3': 'Energy & Petroleum', '4': 'Food Processing', '5': 'Chemicals & Pharmaceuticals',
+                               '6': 'Manufactured Goods and materials', '7': 'Machinery & Equipment', 
+                               '8': 'Consumer Goods', '9': 'Other Commodities'}
+                    return mapping.get(first_digit, 'Other Commodities')
+                
+                chunk['industry_category'] = chunk['prod_descpt_code'].apply(get_industry_category)
+                
+                # Aggregate by product
+                if 'product_description' in chunk.columns:
+                    # Count shipments per product in this chunk
+                    product_counts = chunk.groupby('product_description').size()
+                    
+                    grouped = chunk.groupby('product_description').agg({
+                        'value_fob_aud': 'sum',
+                        'gross_weight_tonnes': 'sum',
+                        'industry_category': 'first'
+                    }).reset_index()
+                    
+                    for _, row in grouped.iterrows():
+                        product = row['product_description']
+                        if product not in product_data:
+                            product_data[product] = {
+                                'value_fob_aud': 0, 
+                                'gross_weight_tonnes': 0,
+                                'shipment_count': 0,
+                                'industry_category': row['industry_category']
+                            }
+                        product_data[product]['value_fob_aud'] += row['value_fob_aud']
+                        product_data[product]['gross_weight_tonnes'] += row['gross_weight_tonnes']
+                        product_data[product]['shipment_count'] += product_counts.get(product, 0)
+                
+                del chunk
+                gc.collect()
+            
+            # Convert to DataFrame
+            df = pd.DataFrame([
+                {
+                    'product_description': k,
+                    'value_fob_aud': v['value_fob_aud'],
+                    'gross_weight_tonnes': v['gross_weight_tonnes'],
+                    'shipment_count': v['shipment_count'],
+                    'industry_category': v['industry_category']
+                }
+                for k, v in product_data.items()
+            ])
+            
+            if len(df) > 0:
+                # Calculate metrics
+                df['value_per_tonne'] = df['value_fob_aud'] / df['gross_weight_tonnes']
+                df['avg_shipment_value'] = df['value_fob_aud'] / df['shipment_count']
+                df['avg_shipment_weight'] = df['gross_weight_tonnes'] / df['shipment_count']
+                
+                # Calculate percentiles
+                df['volume_percentile'] = df['gross_weight_tonnes'].rank(pct=True) * 100
+                df['value_percentile'] = df['value_fob_aud'].rank(pct=True) * 100
+                
+                # Classify products
+                def classify_product(row):
+                    volume_pct = row['volume_percentile']
+                    value_pct = row['value_percentile']
+                    
+                    if volume_pct >= 70 and value_pct >= 70:
+                        return 'High Volume - High Value'
+                    elif volume_pct >= 70 and value_pct <= 30:
+                        return 'High Volume - Low Value'
+                    elif volume_pct <= 30 and value_pct >= 70:
+                        return 'Low Volume - High Value'
+                    else:
+                        return 'Low Volume - Low Value'
+                
+                df['volume_value_category'] = df.apply(classify_product, axis=1)
+            
+            return df.sort_values('value_fob_aud', ascending=False)
+        
         # Default: return empty for unsupported sections
         return pd.DataFrame()
         
@@ -1832,6 +1933,153 @@ if accurate_kpis is not None:
         gc.collect()
     except Exception as e:
         st.error(f"Error in Growing & Declining Markets Analysis: {str(e)}")
+        import traceback
+        st.code(traceback.format_exc())
+    
+    # 8. VOLUME VS VALUE ANALYSIS - Lazy loaded
+    try:
+        st.markdown('<h2 class="section-header">Volume vs Value Analysis</h2>', unsafe_allow_html=True)
+        
+        with st.spinner('Loading volume vs value analysis data...'):
+            vv_df = load_section_data_chunked(file_path, 'volume_value_analysis', filters)
+        
+        if len(vv_df) > 0 and 'volume_value_category' in vv_df.columns:
+            categories = {
+                'High Volume - High Value': ('#2E8B57', 'High Volume - High Value (Market Leaders)'),
+                'High Volume - Low Value': ('#DC143C', 'High Volume - Low Value (Market Opportunities)'),
+                'Low Volume - High Value': ('#4169E1', 'Low Volume - High Value (Premium Products)'),
+                'Low Volume - Low Value': ('#FF8C00', 'Low Volume - Low Value (Niche Markets)')
+            }
+            
+            for category_name, (color, title) in categories.items():
+                category_products = vv_df[vv_df['volume_value_category'] == category_name]
+                
+                if len(category_products) > 0:
+                    st.subheader(f"{title}")
+                    
+                    # Group by industry for cleaner visualization
+                    industry_summary = category_products.groupby('industry_category').agg({
+                        'value_fob_aud': 'sum',
+                        'gross_weight_tonnes': 'sum'
+                    }).round(2).reset_index()
+                    
+                    # Format values
+                    def format_short_value(value):
+                        if value >= 1e9:
+                            return f"${value/1e9:.1f}B"
+                        elif value >= 1e6:
+                            return f"${value/1e6:.1f}M"
+                        elif value >= 1e3:
+                            return f"${value/1e3:.1f}K"
+                        else:
+                            return f"${value:.0f}"
+                    
+                    fig = px.bar(industry_summary, x='value_fob_aud', y='industry_category',
+                                orientation='h',
+                                title=title,
+                                labels={'value_fob_aud': 'Export Value (AUD)', 'industry_category': 'Industry'},
+                                color='value_fob_aud',
+                                color_continuous_scale=[(0, color), (1, color)])
+                    fig.update_traces(
+                        text=[format_short_value(value) for value in industry_summary['value_fob_aud']],
+                        textposition='outside',
+                        textfont=dict(size=10, color=color)
+                    )
+                    fig.update_layout(
+                        title_font_size=16,
+                        title_font_color=color,
+                        xaxis_title_font_size=14,
+                        yaxis_title_font_size=14,
+                        template='plotly_white',
+                        height=500,
+                        showlegend=False
+                    )
+                    fig.update_yaxes(autorange="reversed")
+                    fig.update_xaxes(tickformat='$,.0f')
+                    
+                    # Add summary info
+                    total_value = category_products['value_fob_aud'].sum()
+                    total_volume = category_products['gross_weight_tonnes'].sum()
+                    product_count = len(category_products)
+                    
+                    summary_text = f'Total Products: {product_count}<br>Total Value: {format_short_value(total_value)}<br>Total Volume: {total_volume/1e6:.2f}M tonnes'
+                    fig.add_annotation(
+                        text=summary_text,
+                        xref="paper", yref="paper",
+                        x=0.98, y=0.02,
+                        showarrow=False,
+                        font=dict(size=12, color=color),
+                        bgcolor="white",
+                        bordercolor=color,
+                        borderwidth=1
+                    )
+                    st.plotly_chart(fig)
+                else:
+                    st.info(f"No products found in the {category_name} category.")
+            
+        gc.collect()
+    except Exception as e:
+        st.error(f"Error in Volume vs Value Analysis: {str(e)}")
+        import traceback
+        st.code(traceback.format_exc())
+    
+    # 9. EXECUTIVE SUMMARY
+    try:
+        st.markdown('<h2 class="section-header">Executive Summary</h2>', unsafe_allow_html=True)
+        
+        st.markdown("""
+        <div style="background: white; padding: 2rem; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); margin: 2rem 0;">
+            <h3 style="color: #2c3e50; margin-bottom: 1.5rem;">EXECUTIVE SUMMARY - AUSTRALIAN FREIGHT EXPORTS 2024-2025</h3>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.subheader("Key Highlights")
+            total_val = accurate_kpis['total_value']/1e9
+            total_records = accurate_kpis['total_records']
+            avg_val = accurate_kpis['avg_shipment_value']/1e3
+            median_val = accurate_kpis['median_shipment_value']/1e3
+            total_wt = accurate_kpis['total_weight']/1e6
+            st.markdown(f"""
+            - **Total Export Value**: ${total_val:.2f} Billion AUD
+            - **Total Shipments**: {total_records:,} individual shipments
+            - **Average Shipment Value**: ${avg_val:,.0f}K AUD
+            - **Median Shipment Value**: ${median_val:,.0f}K AUD
+            - **Total Weight**: {total_wt:,.2f} Million Tonnes
+            - **Countries Served**: {len(filter_options['countries'])} export destinations
+            - **Product Categories**: {len(filter_options['products'])} different product types
+            """)
+        
+        with col2:
+            st.subheader("Top Export Destinations")
+            # Get top countries for summary
+            try:
+                top_countries_summary = load_section_data_chunked(file_path, 'country_analysis', filters)
+                if len(top_countries_summary) > 0:
+                    top_3 = top_countries_summary.head(3)
+                    for i, row in top_3.iterrows():
+                        country = row['country_of_destination']
+                        value = row['value_fob_aud'] / 1e9
+                        st.markdown(f"{i+1}. **{country}**: ${value:.2f}B")
+            except:
+                st.markdown("Loading top destinations...")
+        
+        st.markdown("---")
+        st.markdown("""
+        <div style="background: #f8f9fa; padding: 1.5rem; border-radius: 10px; border-left: 4px solid #667eea;">
+            <h4 style="color: #2c3e50; margin-top: 0;">Analysis Insights</h4>
+            <p style="color: #34495e; line-height: 1.6;">
+            This comprehensive dashboard provides real-time insights into Australian freight export data for 2024-2025. 
+            Use the interactive filters in the sidebar to explore specific time periods, countries, and product categories. 
+            All analyses are based on official data from the Australian Bureau of Statistics and are updated monthly.
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+    except Exception as e:
+        st.error(f"Error in Executive Summary: {str(e)}")
         import traceback
         st.code(traceback.format_exc())
     
