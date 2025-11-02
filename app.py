@@ -374,91 +374,153 @@ def ensure_data_file() -> str:
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def load_exports_cleaned(path: str) -> pd.DataFrame:
-    """Load all columns, add compatibility shims, and downcast numerics to save RAM."""
-    # Load all columns to avoid missing any that are needed by the dashboard
-    df = pd.read_csv(path)
+    """Load all columns in chunks, add compatibility shims, and downcast numerics to save RAM."""
+    # Load in chunks to avoid memory issues with large datasets
+    chunk_size = 100000  # 100k rows at a time
+    chunks = []
+    df_combined = None
+    
+    try:
+        for chunk in pd.read_csv(path, chunksize=chunk_size):
+            # Apply transformations to each chunk
+            # Ensure month_number exists
+            if 'month_number' not in chunk.columns and 'month' in chunk.columns:
+                month_map = {
+                    'January': 1, 'February': 2, 'March': 3, 'April': 4,
+                    'May': 5, 'June': 6, 'July': 7, 'August': 8,
+                    'September': 9, 'October': 10, 'November': 11, 'December': 12,
+                    'Jan': 1, 'Feb': 2, 'Mar': 3, 'Apr': 4,
+                    'May': 5, 'Jun': 6, 'Jul': 7, 'Aug': 8,
+                    'Sep': 9, 'Oct': 10, 'Nov': 11, 'Dec': 12
+                }
+                chunk['month_name'] = chunk['month'].astype(str).str.split().str[0]
+                chunk['month_number'] = chunk['month_name'].map(month_map).fillna(1)
+                chunk = chunk.drop(columns=['month_name'], errors='ignore')
+            
+            # Ensure product_description exists
+            if 'product_description' not in chunk.columns:
+                import re
+                def _norm(s: str) -> str:
+                    return re.sub(r"[^a-z0-9]", "", str(s).lower())
+                
+                candidates = []
+                for col in chunk.columns:
+                    col_norm = _norm(col)
+                    if col_norm in {'productdescription', 'product_description', 'sitc'}:
+                        candidates.append(col)
+                
+                if candidates:
+                    chunk['product_description'] = chunk[candidates[0]].astype(str)
+                else:
+                    chunk['product_description'] = 'All Products'
+            
+            # Ensure code column exists
+            if 'prod_descpt_code' not in chunk.columns and 'sitc_code' in chunk.columns:
+                chunk['prod_descpt_code'] = chunk['sitc_code'].astype(str)
+            
+            # Downcast numerics
+            for col in chunk.select_dtypes(include=['int64','float64']).columns:
+                if pd.api.types.is_integer_dtype(chunk[col]):
+                    chunk[col] = pd.to_numeric(chunk[col], downcast='integer')
+                else:
+                    chunk[col] = pd.to_numeric(chunk[col], downcast='float')
+            
+            # Derived fields
+            if 'year' in chunk.columns and 'month_number' in chunk.columns:
+                chunk['date'] = pd.to_datetime(chunk['year'].astype(str) + '-' + chunk['month_number'].astype(str).str.zfill(2) + '-01')
+            if {'value_fob_aud','gross_weight_tonnes'}.issubset(chunk.columns):
+                chunk['value_per_tonne'] = chunk['value_fob_aud'] / chunk['gross_weight_tonnes']
+            
+            chunks.append(chunk)
+            # Combine chunks in batches to reduce memory spikes
+            if len(chunks) >= 5:  # Combine every 5 chunks (500k rows)
+                if df_combined is None:
+                    df_combined = pd.concat(chunks, ignore_index=True)
+                else:
+                    df_combined = pd.concat([df_combined] + chunks, ignore_index=True)
+                chunks = []
+                gc.collect()
+        
+        # Combine remaining chunks
+        if chunks:
+            if df_combined is None:
+                df_combined = pd.concat(chunks, ignore_index=True)
+            else:
+                df_combined = pd.concat([df_combined] + chunks, ignore_index=True)
+        
+        df = df_combined if df_combined is not None else pd.DataFrame()
+        del chunks, df_combined
+        gc.collect()
+        
+        return df
+    except Exception as e:
+        st.error(f"Error loading data file: {str(e)}")
+        import traceback
+        st.code(traceback.format_exc())
+        return pd.DataFrame()  # Return empty dataframe on error
 
-    # Ensure month_number exists
-    if 'month_number' not in df.columns and 'month' in df.columns:
-        month_map = {
-            'January': 1, 'February': 2, 'March': 3, 'April': 4,
-            'May': 5, 'June': 6, 'July': 7, 'August': 8,
-            'September': 9, 'October': 10, 'November': 11, 'December': 12,
-            'Jan': 1, 'Feb': 2, 'Mar': 3, 'Apr': 4,
-            'May': 5, 'Jun': 6, 'Jul': 7, 'Aug': 8,
-            'Sep': 9, 'Oct': 10, 'Nov': 11, 'Dec': 12
+
+@st.cache_data(ttl=600)
+def compute_kpis_chunked(file_path: str) -> dict:
+    """Compute KPIs by processing in chunks to avoid loading full dataset into memory."""
+    total_value = 0.0
+    total_weight = 0.0
+    total_records = 0
+    value_list = []  # For median calculation
+    
+    chunk_size = 50000  # Process 50k rows at a time
+    
+    try:
+        # Process in chunks
+        for chunk in pd.read_csv(file_path, chunksize=chunk_size):
+            if 'value_fob_aud' in chunk.columns:
+                total_value += float(chunk['value_fob_aud'].sum())
+                # Sample values for median (every 100th record to save memory)
+                value_list.extend(chunk['value_fob_aud'].iloc[::100].tolist())
+            if 'gross_weight_tonnes' in chunk.columns:
+                total_weight += float(chunk['gross_weight_tonnes'].sum())
+            total_records += len(chunk)
+            del chunk  # Explicitly delete chunk
+            gc.collect()
+        
+        # Calculate median from sampled values
+        median_val = float(pd.Series(value_list).median()) if value_list else 0.0
+        del value_list
+        gc.collect()
+        
+        return {
+            'total_value': total_value,
+            'total_weight': total_weight,
+            'total_records': total_records,
+            'total_shipments': total_records,
+            'avg_shipment_value': (total_value / total_records) if total_records > 0 else 0.0,
+            'median_shipment_value': median_val
         }
-        # Extract month name from month column (format: "January 2024" or just "January")
-        df['month_name'] = df['month'].astype(str).str.split().str[0]
-        df['month_number'] = df['month_name'].map(month_map).fillna(1)
-        df = df.drop(columns=['month_name'], errors='ignore')
-
-    # Ensure product_description exists (try multiple possible column names)
-    if 'product_description' not in df.columns:
-        import re
-        def _norm(s: str) -> str:
-            return re.sub(r"[^a-z0-9]", "", str(s).lower())
-        
-        # Try exact matches first, then fuzzy matches
-        candidates = []
-        for col in df.columns:
-            col_norm = _norm(col)
-            if col_norm in {'productdescription', 'product_description', 'sitc'}:
-                candidates.append(col)
-        
-        if candidates:
-            df['product_description'] = df[candidates[0]].astype(str)
-        else:
-            # Fallback: if still not found, check if we can use sitc_code or other columns
-            st.warning(f"Warning: 'product_description' column not found. Available columns: {list(df.columns)[:10]}...")
-            df['product_description'] = 'All Products'
-
-    # Ensure code column exists for industry mapping
-    if 'prod_descpt_code' not in df.columns and 'sitc_code' in df.columns:
-        df['prod_descpt_code'] = df['sitc_code'].astype(str)
-
-    # Downcast numerics to reduce memory
-    for col in df.select_dtypes(include=['int64','float64']).columns:
-        if pd.api.types.is_integer_dtype(df[col]):
-            df[col] = pd.to_numeric(df[col], downcast='integer')
-        else:
-            df[col] = pd.to_numeric(df[col], downcast='float')
-
-    # Derived fields used across the app
-    if 'year' in df.columns and 'month_number' in df.columns:
-        df['date'] = pd.to_datetime(df['year'].astype(str) + '-' + df['month_number'].astype(str).str.zfill(2) + '-01')
-    if {'value_fob_aud','gross_weight_tonnes'}.issubset(df.columns):
-        df['value_per_tonne'] = df['value_fob_aud'] / df['gross_weight_tonnes']
-
-    gc.collect()
-    return df
+    except Exception as e:
+        st.error(f"Error computing KPIs: {str(e)}")
+        return None
 
 
 @st.cache_data(ttl=600)
 def load_data():
-    """Efficiently load dataset and compute KPIs."""
+    """Efficiently load dataset - use lazy loading for large datasets."""
     try:
         file_path = ensure_data_file()
+        
+        # Compute KPIs from chunks first (doesn't load full dataset)
+        accurate_kpis = compute_kpis_chunked(file_path)
+        if accurate_kpis is None:
+            return None, None
+        
+        # Now load the full dataset with optimizations
         df = load_exports_cleaned(file_path)
-
-        total_value = float(df['value_fob_aud'].sum()) if 'value_fob_aud' in df.columns else 0.0
-        total_weight = float(df['gross_weight_tonnes'].sum()) if 'gross_weight_tonnes' in df.columns else 0.0
-        total_records = len(df)
-        total_shipments = total_records
-
-        accurate_kpis = {
-            'total_value': total_value,
-            'total_weight': total_weight,
-            'total_records': total_records,
-            'total_shipments': total_shipments,
-            'avg_shipment_value': (total_value / total_shipments) if total_shipments > 0 else 0.0,
-            'median_shipment_value': float(df['value_fob_aud'].median()) if 'value_fob_aud' in df.columns else 0.0
-        }
-
+        
         gc.collect()
         return df, accurate_kpis
     except Exception as e:
         st.error(f"Error loading data: {str(e)}")
+        import traceback
+        st.code(traceback.format_exc())
         return None, None
 
 # Load data with error handling
