@@ -763,9 +763,14 @@ if df is not None and accurate_kpis is not None:
                 fig1 = px.line(monthly, x='period', y=monthly['value_fob_aud'] / 1e9,
                                title='Monthly Export Value Trend (2024-2025)',
                                labels={'y': 'Export Value (Billion AUD)', 'x': 'Month'},
-                               markers=True,
-                               text=[format_export_value(value) for value in monthly['value_fob_aud']])
-                fig1.update_traces(line_color='#2E86AB', line_width=3, marker_size=8, textposition='top center')
+                               markers=True)
+                fig1.update_traces(
+                    line_color='#2E86AB', 
+                    line_width=3, 
+                    marker_size=8, 
+                    text=[format_export_value(value) for value in monthly['value_fob_aud']],
+                    textposition='top center'
+                )
                 fig1.update_layout(
                     title_font_size=16,
                     title_font_color='#2c3e50',
@@ -795,9 +800,15 @@ if df is not None and accurate_kpis is not None:
                 fig2 = px.line(monthly, x='period', y=monthly['gross_weight_tonnes'] / 1e6,
                                title='Monthly Export Weight Trend (2024-2025)',
                                labels={'y': 'Export Weight (Million Tonnes)', 'x': 'Month'},
-                               markers=True,
-                               text=[format_weight_value(value) for value in monthly['gross_weight_tonnes']])
-                fig2.update_traces(line_color='#F18F01', line_width=3, marker_size=8, marker_symbol='square', textposition='top center')
+                               markers=True)
+                fig2.update_traces(
+                    line_color='#F18F01', 
+                    line_width=3, 
+                    marker_size=8, 
+                    marker_symbol='square',
+                    text=[format_weight_value(value) for value in monthly['gross_weight_tonnes']],
+                    textposition='top center'
+                )
                 fig2.update_layout(
                     title_font_size=16,
                     title_font_color='#2c3e50',
@@ -825,9 +836,15 @@ if df is not None and accurate_kpis is not None:
                 fig3 = px.line(monthly, x='period', y=monthly['value_per_tonne'],
                                title='Average Value per Tonne Trend (2024-2025)',
                                labels={'y': 'Value per Tonne (AUD)', 'x': 'Month'},
-                               markers=True,
-                               text=[format_value_per_tonne(value) for value in monthly['value_per_tonne']])
-                fig3.update_traces(line_color='#06A77D', line_width=3, marker_size=8, marker_symbol='diamond', textposition='top center')
+                               markers=True)
+                fig3.update_traces(
+                    line_color='#06A77D', 
+                    line_width=3, 
+                    marker_size=8, 
+                    marker_symbol='diamond',
+                    text=[format_value_per_tonne(value) for value in monthly['value_per_tonne']],
+                    textposition='top center'
+                )
                 fig3.update_layout(
                     title_font_size=16,
                     title_font_color='#2c3e50',
@@ -880,8 +897,8 @@ if df is not None and accurate_kpis is not None:
                  title='Top 15 Countries by Export Value',
                  labels={'value_billions': 'Export Value (Billion AUD)', 'country_of_destination': 'Country'},
                  color='value_billions',
-                 color_continuous_scale='Greens',
-                 text=[f"${value:.1f}B" for value in top_15['value_billions']])
+                 color_continuous_scale='Greens')
+    fig.update_traces(text=[f"${value:.1f}B" for value in top_15['value_billions']])
     
     fig.update_layout(
         title_font_size=16,
@@ -946,8 +963,8 @@ if df is not None and accurate_kpis is not None:
                  title='Top 20 Products by Export Value',
                  labels={'value_fob_aud': 'Export Value (AUD)', 'product_description': 'Product'},
                  color='value_fob_aud',
-                 color_continuous_scale='Blues',
-                 text=[f"${value/1e9:.1f}B" for value in top_20_products['value_fob_aud']])
+                 color_continuous_scale='Blues')
+    fig.update_traces(text=[f"${value/1e9:.1f}B" for value in top_20_products['value_fob_aud']])
     
     fig.update_layout(
         title_font_size=16,
@@ -1054,8 +1071,8 @@ if df is not None and accurate_kpis is not None:
                   title='Australian Export Value by Industry Category',
                   labels={'Total_Value': 'Export Value (AUD)', 'industry_category': 'Industry'},
                   color='Total_Value',
-                  color_continuous_scale='viridis',
-                  text=[f"${value/1e9:.1f}B<br>({pct:.1f}%)" for value, pct in zip(top_industries['Total_Value'], top_industries['Value_Percentage'])])
+                  color_continuous_scale='viridis')
+    fig1.update_traces(text=[f"${value/1e9:.1f}B<br>({pct:.1f}%)" for value, pct in zip(top_industries['Total_Value'], top_industries['Value_Percentage'])])
     
     fig1.update_layout(
         title_font_size=16,
@@ -1090,8 +1107,8 @@ if df is not None and accurate_kpis is not None:
                   title='Industry Value Density (Value per Tonne Shipped)',
                   labels={'Value_per_Tonne_Ratio': 'Value per Tonne (AUD)', 'industry_category': 'Industry'},
                   color='Value_per_Tonne_Ratio',
-                  color_continuous_scale='viridis',
-                  text=[f"${value:,.0f}/tonne" for value in value_density_industry['Value_per_Tonne_Ratio']])
+                  color_continuous_scale='viridis')
+    fig2.update_traces(text=[f"${value:,.0f}/tonne" for value in value_density_industry['Value_per_Tonne_Ratio']])
     
     fig2.update_layout(
         title_font_size=16,
@@ -1253,8 +1270,8 @@ if df is not None and accurate_kpis is not None:
                   title='TOP 10 DESTINATION COUNTRIES',
                   labels={'Total_Value': 'Import Value (AUD)', 'country_of_destination': 'Country'},
                   color='Total_Value',
-                  color_continuous_scale='plasma',
-                  text=[f"${value/1e9:.1f}B" for value in top_10_countries['Total_Value']])
+                  color_continuous_scale='plasma')
+    fig2.update_traces(text=[f"${value/1e9:.1f}B" for value in top_10_countries['Total_Value']])
     fig2.update_layout(
         title_font_size=16,
         title_font_color='#2c3e50',
@@ -1512,8 +1529,8 @@ if df is not None and accurate_kpis is not None:
                         title=title,
                         labels={'value_fob_aud': 'Export Value (AUD)', 'industry_category': 'Industry'},
                         color='value_fob_aud',
-                        color_continuous_scale=[(0, color), (1, color)],  # Use single color
-                        text=[format_short_value(value) for value in industry_summary['value_fob_aud']])
+                        color_continuous_scale=[(0, color), (1, color)])  # Use single color
+            fig.update_traces(text=[format_short_value(value) for value in industry_summary['value_fob_aud']])
             
             fig.update_layout(
                 title_font_size=16,
@@ -1608,8 +1625,8 @@ if df is not None and accurate_kpis is not None:
                  title='Export Value by State (2024-2025)',
                  labels={'value_billions': 'Export Value (Billion AUD)', 'state': 'State'},
                  color='value_billions',
-                 color_continuous_scale='viridis',
-                 text=[f"${value:.1f}B<br>({pct:.1f}%)" for value, pct in zip(states_df['value_billions'], states_df['percentage'])])
+                 color_continuous_scale='viridis')
+    fig.update_traces(text=[f"${value:.1f}B<br>({pct:.1f}%)" for value, pct in zip(states_df['value_billions'], states_df['percentage'])])
     
     # Update layout for better presentation
     fig.update_layout(
@@ -1662,8 +1679,8 @@ if df is not None and accurate_kpis is not None:
                  title='Export Value by Transport Mode (2024-2025)',
                  labels={'value_billions': 'Export Value (Billion AUD)', 'transport_mode': 'Transport Mode'},
                  color='value_billions',
-                 color_continuous_scale='viridis',
-                 text=[f"${value:.1f}B<br>({pct:.1f}%)" for value, pct in zip(transport_df['value_billions'], transport_df['percentage'])])
+                 color_continuous_scale='viridis')
+    fig.update_traces(text=[f"${value:.1f}B<br>({pct:.1f}%)" for value, pct in zip(transport_df['value_billions'], transport_df['percentage'])])
     
     # Update layout for better presentation
     fig.update_layout(
@@ -1728,8 +1745,8 @@ if df is not None and accurate_kpis is not None:
                  title='Top 15 Ports by Tonnage',
                  labels={'gross_weight_tonnes': 'Total Tonnage', 'port_of_loading': 'Port'},
                  color='gross_weight_tonnes',
-                 color_continuous_scale='viridis',
-                 text=[f"{value/1e6:.1f}M" for value in port_tonnage_df['gross_weight_tonnes']])
+                 color_continuous_scale='viridis')
+    fig.update_traces(text=[f"{value/1e6:.1f}M" for value in port_tonnage_df['gross_weight_tonnes']])
     fig.update_layout(
         title_font_size=16,
         title_font_color='#2c3e50',
