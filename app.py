@@ -767,7 +767,8 @@ if df is not None and accurate_kpis is not None:
                 fig1.update_traces(
                     line_color='#2E86AB', 
                     line_width=3, 
-                    marker_size=8, 
+                    marker_size=8,
+                    mode='lines+markers+text',
                     text=[format_export_value(value) for value in monthly['value_fob_aud']],
                     textposition='top center'
                 )
@@ -804,8 +805,9 @@ if df is not None and accurate_kpis is not None:
                 fig2.update_traces(
                     line_color='#F18F01', 
                     line_width=3, 
-                    marker_size=8, 
+                    marker_size=8,
                     marker_symbol='square',
+                    mode='lines+markers+text',
                     text=[format_weight_value(value) for value in monthly['gross_weight_tonnes']],
                     textposition='top center'
                 )
@@ -840,8 +842,9 @@ if df is not None and accurate_kpis is not None:
                 fig3.update_traces(
                     line_color='#06A77D', 
                     line_width=3, 
-                    marker_size=8, 
+                    marker_size=8,
                     marker_symbol='diamond',
+                    mode='lines+markers+text',
                     text=[format_value_per_tonne(value) for value in monthly['value_per_tonne']],
                     textposition='top center'
                 )
@@ -898,7 +901,10 @@ if df is not None and accurate_kpis is not None:
                  labels={'value_billions': 'Export Value (Billion AUD)', 'country_of_destination': 'Country'},
                  color='value_billions',
                  color_continuous_scale='Greens')
-    fig.update_traces(text=[f"${value:.1f}B" for value in top_15['value_billions']])
+    fig.update_traces(
+        text=[f"${value:.1f}B" for value in top_15['value_billions']],
+        textposition='outside'
+    )
     
     fig.update_layout(
         title_font_size=16,
@@ -964,7 +970,12 @@ if df is not None and accurate_kpis is not None:
                  labels={'value_fob_aud': 'Export Value (AUD)', 'product_description': 'Product'},
                  color='value_fob_aud',
                  color_continuous_scale='Blues')
-    fig.update_traces(text=[f"${value/1e9:.1f}B" for value in top_20_products['value_fob_aud']])
+    fig.update_traces(
+        text=[f"${value/1e9:.1f}B" for value in top_20_products['value_fob_aud']],
+        textposition='outside',
+        textfont=dict(size=9, color='#2c3e50'),
+        hovertemplate='<b>%{y}</b><br>Export Value: $%{x:,.0f}<extra></extra>'
+    )
     
     fig.update_layout(
         title_font_size=16,
@@ -977,13 +988,6 @@ if df is not None and accurate_kpis is not None:
     )
     fig.update_yaxes(autorange="reversed")
     fig.update_xaxes(tickformat='$,.0f')
-    
-    # Update text positioning and styling
-    fig.update_traces(
-        textposition='outside',
-        textfont=dict(size=9, color='#2c3e50'),
-        hovertemplate='<b>%{y}</b><br>Export Value: $%{x:,.0f}<extra></extra>'
-    )
     
     st.plotly_chart(fig)
     
@@ -1072,7 +1076,10 @@ if df is not None and accurate_kpis is not None:
                   labels={'Total_Value': 'Export Value (AUD)', 'industry_category': 'Industry'},
                   color='Total_Value',
                   color_continuous_scale='viridis')
-    fig1.update_traces(text=[f"${value/1e9:.1f}B<br>({pct:.1f}%)" for value, pct in zip(top_industries['Total_Value'], top_industries['Value_Percentage'])])
+    fig1.update_traces(
+        text=[f"${value/1e9:.1f}B<br>({pct:.1f}%)" for value, pct in zip(top_industries['Total_Value'], top_industries['Value_Percentage'])],
+        textposition='outside'
+    )
     
     fig1.update_layout(
         title_font_size=16,
@@ -1108,7 +1115,10 @@ if df is not None and accurate_kpis is not None:
                   labels={'Value_per_Tonne_Ratio': 'Value per Tonne (AUD)', 'industry_category': 'Industry'},
                   color='Value_per_Tonne_Ratio',
                   color_continuous_scale='viridis')
-    fig2.update_traces(text=[f"${value:,.0f}/tonne" for value in value_density_industry['Value_per_Tonne_Ratio']])
+    fig2.update_traces(
+        text=[f"${value:,.0f}/tonne" for value in value_density_industry['Value_per_Tonne_Ratio']],
+        textposition='outside'
+    )
     
     fig2.update_layout(
         title_font_size=16,
@@ -1271,7 +1281,12 @@ if df is not None and accurate_kpis is not None:
                   labels={'Total_Value': 'Import Value (AUD)', 'country_of_destination': 'Country'},
                   color='Total_Value',
                   color_continuous_scale='plasma')
-    fig2.update_traces(text=[f"${value/1e9:.1f}B" for value in top_10_countries['Total_Value']])
+    fig2.update_traces(
+        text=[f"${value/1e9:.1f}B" for value in top_10_countries['Total_Value']],
+        textposition='outside',
+        textfont=dict(size=10, color='#2c3e50'),
+        hovertemplate='<b>%{y}</b><br>Import Value: $%{x:,.0f}<extra></extra>'
+    )
     fig2.update_layout(
         title_font_size=16,
         title_font_color='#2c3e50',
@@ -1282,11 +1297,6 @@ if df is not None and accurate_kpis is not None:
     )
     fig2.update_yaxes(autorange="reversed")
     fig2.update_xaxes(tickformat='$,.0f')
-    fig2.update_traces(
-        textposition='outside',
-        textfont=dict(size=10, color='#2c3e50'),
-        hovertemplate='<b>%{y}</b><br>Import Value: $%{x:,.0f}<extra></extra>'
-    )
     st.plotly_chart(fig2)
     
     # 3. PRODUCT DIVERSIFICATION BY COUNTRY (Interactive)
@@ -1530,7 +1540,12 @@ if df is not None and accurate_kpis is not None:
                         labels={'value_fob_aud': 'Export Value (AUD)', 'industry_category': 'Industry'},
                         color='value_fob_aud',
                         color_continuous_scale=[(0, color), (1, color)])  # Use single color
-            fig.update_traces(text=[format_short_value(value) for value in industry_summary['value_fob_aud']])
+            fig.update_traces(
+                text=[format_short_value(value) for value in industry_summary['value_fob_aud']],
+                textposition='outside',
+                textfont=dict(size=10, color=color),
+                hovertemplate='<b>%{y}</b><br>Export Value: $%{x:,.0f}<extra></extra>'
+            )
             
             fig.update_layout(
                 title_font_size=16,
@@ -1543,13 +1558,6 @@ if df is not None and accurate_kpis is not None:
             )
             fig.update_yaxes(autorange="reversed")
             fig.update_xaxes(tickformat='$,.0f')
-            
-            # Update text positioning and styling
-            fig.update_traces(
-                textposition='outside',
-                textfont=dict(size=10, color=color),
-                hovertemplate='<b>%{y}</b><br>Export Value: $%{x:,.0f}<extra></extra>'
-            )
             
             # Add summary information as annotation
             total_value = category_products['value_fob_aud'].sum()
@@ -1626,7 +1634,13 @@ if df is not None and accurate_kpis is not None:
                  labels={'value_billions': 'Export Value (Billion AUD)', 'state': 'State'},
                  color='value_billions',
                  color_continuous_scale='viridis')
-    fig.update_traces(text=[f"${value:.1f}B<br>({pct:.1f}%)" for value, pct in zip(states_df['value_billions'], states_df['percentage'])])
+    fig.update_traces(
+        text=[f"${value:.1f}B<br>({pct:.1f}%)" for value, pct in zip(states_df['value_billions'], states_df['percentage'])],
+        textposition='outside',
+        textfont=dict(size=10, color='#2c3e50'),
+        hovertemplate='<b>%{y}</b><br>Export Value: $%{x:.1f}B<br>Percentage: %{customdata:.1f}%<extra></extra>',
+        customdata=states_df['percentage']
+    )
     
     # Update layout for better presentation
     fig.update_layout(
@@ -1644,14 +1658,6 @@ if df is not None and accurate_kpis is not None:
     
     # Update x-axis formatting
     fig.update_xaxes(tickformat='$,.1f')
-    
-    # Update text positioning and styling
-    fig.update_traces(
-        textposition='outside',
-        textfont=dict(size=10, color='#2c3e50'),
-        hovertemplate='<b>%{y}</b><br>Export Value: $%{x:.1f}B<br>Percentage: %{customdata:.1f}%<extra></extra>',
-        customdata=states_df['percentage']
-    )
     
     st.plotly_chart(fig)
     
@@ -1680,7 +1686,13 @@ if df is not None and accurate_kpis is not None:
                  labels={'value_billions': 'Export Value (Billion AUD)', 'transport_mode': 'Transport Mode'},
                  color='value_billions',
                  color_continuous_scale='viridis')
-    fig.update_traces(text=[f"${value:.1f}B<br>({pct:.1f}%)" for value, pct in zip(transport_df['value_billions'], transport_df['percentage'])])
+    fig.update_traces(
+        text=[f"${value:.1f}B<br>({pct:.1f}%)" for value, pct in zip(transport_df['value_billions'], transport_df['percentage'])],
+        textposition='outside',
+        textfont=dict(size=10, color='#2c3e50'),
+        hovertemplate='<b>%{x}</b><br>Export Value: $%{y:.1f}B<br>Percentage: %{customdata:.1f}%<extra></extra>',
+        customdata=transport_df['percentage']
+    )
     
     # Update layout for better presentation
     fig.update_layout(
@@ -1698,14 +1710,6 @@ if df is not None and accurate_kpis is not None:
     
     # Update y-axis formatting
     fig.update_yaxes(tickformat='$,.1f')
-    
-    # Update text positioning and styling (at the top of bars)
-    fig.update_traces(
-        textposition='outside',
-        textfont=dict(size=10, color='#2c3e50'),
-        hovertemplate='<b>%{x}</b><br>Export Value: $%{y:.1f}B<br>Percentage: %{customdata:.1f}%<extra></extra>',
-        customdata=transport_df['percentage']
-    )
     
     st.plotly_chart(fig)
     
@@ -1746,7 +1750,12 @@ if df is not None and accurate_kpis is not None:
                  labels={'gross_weight_tonnes': 'Total Tonnage', 'port_of_loading': 'Port'},
                  color='gross_weight_tonnes',
                  color_continuous_scale='viridis')
-    fig.update_traces(text=[f"{value/1e6:.1f}M" for value in port_tonnage_df['gross_weight_tonnes']])
+    fig.update_traces(
+        text=[f"{value/1e6:.1f}M" for value in port_tonnage_df['gross_weight_tonnes']],
+        textposition='outside',
+        textfont=dict(size=10, color='#2c3e50'),
+        hovertemplate='<b>%{y}</b><br>Total Tonnage: %{x:,.0f} tonnes<extra></extra>'
+    )
     fig.update_layout(
         title_font_size=16,
         title_font_color='#2c3e50',
@@ -1757,11 +1766,6 @@ if df is not None and accurate_kpis is not None:
     )
     fig.update_yaxes(autorange="reversed")
     fig.update_xaxes(tickformat=',.0f')
-    fig.update_traces(
-        textposition='outside',
-        textfont=dict(size=10, color='#2c3e50'),
-        hovertemplate='<b>%{y}</b><br>Total Tonnage: %{x:,.0f} tonnes<extra></extra>'
-    )
     st.plotly_chart(fig)
     
     # Port Efficiency Analysis (from your notebook) - Using FULL dataset for accuracy
