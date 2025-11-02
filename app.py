@@ -374,13 +374,26 @@ def ensure_data_file() -> str:
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def load_exports_cleaned(path: str) -> pd.DataFrame:
-    """Load all columns in chunks, add compatibility shims, and downcast numerics to save RAM."""
-    # Load in chunks to avoid memory issues with large datasets
-    chunk_size = 100000  # 100k rows at a time
+    """Load all columns in chunks, add compatibility shims, and downcast numerics to save RAM.
+    For Streamlit Cloud, uses sampling to reduce memory usage."""
+    import os
+    
+    # Check if running on Streamlit Cloud (limited memory)
+    # Use sampling for cloud, full dataset for local
+    is_streamlit_cloud = (
+        os.environ.get('STREAMLIT_SHARING', '').lower() == 'true' or
+        'streamlit.app' in os.environ.get('SERVER_NAME', '') or
+        os.path.exists('/app')  # Streamlit Cloud container indicator
+    )
+    
+    # Load in smaller chunks for cloud environments
+    chunk_size = 50000 if is_streamlit_cloud else 100000  # Smaller chunks for cloud
     chunks = []
     df_combined = None
+    max_rows = 300000 if is_streamlit_cloud else None  # Limit to 300k rows on cloud (memory constraint)
     
     try:
+        rows_loaded = 0
         for chunk in pd.read_csv(path, chunksize=chunk_size):
             # Apply transformations to each chunk
             # Ensure month_number exists
@@ -431,9 +444,19 @@ def load_exports_cleaned(path: str) -> pd.DataFrame:
             if {'value_fob_aud','gross_weight_tonnes'}.issubset(chunk.columns):
                 chunk['value_per_tonne'] = chunk['value_fob_aud'] / chunk['gross_weight_tonnes']
             
+            # For cloud: limit rows to prevent memory issues
+            if is_streamlit_cloud and max_rows:
+                # Sample: take every 5th row for cloud (reduces to ~20% of data, ~280k rows from 1.4M)
+                if len(chunk) > 0:
+                    chunk = chunk.iloc[::5].copy()
+                rows_loaded += len(chunk)
+                if rows_loaded >= max_rows:
+                    break
+            
             chunks.append(chunk)
             # Combine chunks in batches to reduce memory spikes
-            if len(chunks) >= 5:  # Combine every 5 chunks (500k rows)
+            batch_size = 3 if is_streamlit_cloud else 5  # Smaller batches for cloud
+            if len(chunks) >= batch_size:
                 if df_combined is None:
                     df_combined = pd.concat(chunks, ignore_index=True)
                 else:
@@ -451,6 +474,10 @@ def load_exports_cleaned(path: str) -> pd.DataFrame:
         df = df_combined if df_combined is not None else pd.DataFrame()
         del chunks, df_combined
         gc.collect()
+        
+        # Add info message for cloud users
+        if is_streamlit_cloud and len(df) > 0:
+            st.info(f"Note: Displaying sampled dataset ({len(df):,} records) due to Streamlit Cloud memory limits. For full dataset, run locally.")
         
         return df
     except Exception as e:
