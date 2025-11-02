@@ -907,17 +907,22 @@ def load_section_data_chunked(file_path: str, section: str, filters: dict = None
                     chunk_q1 = chunk
                 
                 if 'country_of_destination' in chunk_q1.columns and 'year' in chunk_q1.columns:
+                    # Ensure year is numeric
+                    chunk_q1['year'] = pd.to_numeric(chunk_q1['year'], errors='coerce')
+                    chunk_q1 = chunk_q1.dropna(subset=['year'])
+                    
                     grouped = chunk_q1.groupby(['country_of_destination', 'year']).agg({
                         'value_fob_aud': 'sum'
                     }).reset_index()
                     
                     for _, row in grouped.iterrows():
                         country = row['country_of_destination']
-                        year = row['year']
-                        if country not in country_yearly_data:
-                            country_yearly_data[country] = {2024: 0, 2025: 0}
-                        if year in country_yearly_data[country]:
-                            country_yearly_data[country][year] += row['value_fob_aud']
+                        year = int(row['year']) if pd.notna(row['year']) else None
+                        if year and year in [2024, 2025]:
+                            if country not in country_yearly_data:
+                                country_yearly_data[country] = {2024: 0, 2025: 0}
+                            if year in country_yearly_data[country]:
+                                country_yearly_data[country][year] += row['value_fob_aud']
                 
                 del chunk, chunk_q1
                 gc.collect()
@@ -937,8 +942,15 @@ def load_section_data_chunked(file_path: str, section: str, filters: dict = None
                         'YoY_Growth_Absolute': (val_2025 - val_2024) / 1e9
                     })
             
-            df = pd.DataFrame(growth_data)
-            return df.sort_values('YoY_Growth_%', ascending=False)
+            # Create DataFrame with expected columns even if empty
+            if len(growth_data) == 0:
+                df = pd.DataFrame(columns=['country_of_destination', 'Q1_2024_Value', 'Q1_2025_Value', 
+                                          'YoY_Growth_%', 'YoY_Growth_Absolute'])
+            else:
+                df = pd.DataFrame(growth_data)
+                df = df.sort_values('YoY_Growth_%', ascending=False)
+            
+            return df
         
         # Default: return empty for unsupported sections
         return pd.DataFrame()
@@ -1766,7 +1778,7 @@ if accurate_kpis is not None:
         with st.spinner('Loading growth analysis data...'):
             growth_df = load_section_data_chunked(file_path, 'growing_declining_markets', filters)
         
-        if len(growth_df) > 0:
+        if len(growth_df) > 0 and 'YoY_Growth_%' in growth_df.columns:
             # Top growing markets
             top_growing = growth_df.head(15).reset_index()
             
@@ -1814,6 +1826,8 @@ if accurate_kpis is not None:
             fig2.add_vline(x=0, line_dash="dash", line_color="black", opacity=0.3)
             fig2.update_traces(textposition='outside')
             st.plotly_chart(fig2)
+        else:
+            st.info("No growth data available. This analysis requires Q1 data (January-April) for both 2024 and 2025 with countries having at least $100M in exports in Q1 2024.")
             
         gc.collect()
     except Exception as e:
