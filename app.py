@@ -530,6 +530,7 @@ def compute_kpis_chunked(file_path: str, file_mtime: float = None) -> dict:
     
     try:
         # Load EXACTLY like the notebook: df = pd.read_csv('data/exports_cleaned.csv')
+        # Use default pandas settings (no dtype specification, no special parsing)
         # This is cached, so loading full file is acceptable for KPIs
         df = pd.read_csv(file_path)
         
@@ -554,6 +555,13 @@ def compute_kpis_chunked(file_path: str, file_mtime: float = None) -> dict:
                 else:
                     # Last resort: create a placeholder (shouldn't happen if data is properly cleaned)
                     df['product_description'] = 'All Products'
+        
+        # Ensure numeric columns are properly typed (pandas may read them as strings if CSV has formatting)
+        # The notebook uses pd.to_numeric in the cleaning step, so we should ensure they're numeric here too
+        if 'value_fob_aud' in df.columns:
+            df['value_fob_aud'] = pd.to_numeric(df['value_fob_aud'], errors='coerce').fillna(0)
+        if 'gross_weight_tonnes' in df.columns:
+            df['gross_weight_tonnes'] = pd.to_numeric(df['gross_weight_tonnes'], errors='coerce').fillna(0)
         
         # Compute EXACTLY like the notebook:
         # Total Export Value: df['value_fob_aud'].sum()
