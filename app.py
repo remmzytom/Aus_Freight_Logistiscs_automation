@@ -578,8 +578,8 @@ def compute_kpis_chunked(file_path: str, file_mtime: float = None) -> dict:
             s = re.sub(r"\s+", " ", str(x).strip()).lower()
             return s
         
-        # Process in chunks
-        for chunk in pd.read_csv(file_path, chunksize=chunk_size, low_memory=False):
+        # Process in chunks (handle thousands separators like 1,234,567)
+        for chunk in pd.read_csv(file_path, chunksize=chunk_size, low_memory=False, thousands=","):
             # Convert numeric columns, handling NaN values
             if 'value_fob_aud' in chunk.columns:
                 chunk['value_fob_aud'] = pd.to_numeric(chunk['value_fob_aud'], errors='coerce').fillna(0)
