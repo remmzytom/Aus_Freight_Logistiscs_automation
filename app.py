@@ -1257,6 +1257,81 @@ if accurate_kpis is not None:
                     os.remove(raw_path)
                 st.success("Data refresh initiated. Reloading...")
                 st.rerun()
+
+            # Optional diagnostics to pinpoint mismatches
+            show_debug = st.sidebar.checkbox("Show debug diagnostics")
+            if show_debug:
+                import pandas as pd
+                import re
+                st.sidebar.markdown("**Debug (streamed from cleaned CSV)**")
+                chunk_size = 50000
+                total_rows = 0
+                total_val = 0.0
+                total_weight = 0.0
+                value_na = 0
+                weight_na = 0
+                detected_product_col = None
+                sample_products = []
+                unique_countries = set()
+                unique_products = set()
+
+                def _norm_txt(x: str) -> str:
+                    return re.sub(r"\s+", " ", str(x).strip()).lower()
+
+                for chunk in pd.read_csv(file_path, chunksize=chunk_size, low_memory=False):
+                    total_rows += len(chunk)
+
+                    if 'value_fob_aud' in chunk.columns:
+                        s = pd.to_numeric(chunk['value_fob_aud'], errors='coerce')
+                        value_na += int(s.isna().sum())
+                        total_val += float(s.fillna(0).sum())
+                    if 'gross_weight_tonnes' in chunk.columns:
+                        s2 = pd.to_numeric(chunk['gross_weight_tonnes'], errors='coerce')
+                        weight_na += int(s2.isna().sum())
+                        total_weight += float(s2.fillna(0).sum())
+
+                    # Detect product column once
+                    if detected_product_col is None:
+                        if 'product_description' in chunk.columns:
+                            detected_product_col = 'product_description'
+                        else:
+                            for col in chunk.columns:
+                                cn = re.sub(r"[^a-z0-9]", "", str(col).lower())
+                                if 'product' in cn and 'description' in cn:
+                                    detected_product_col = col
+                                    break
+
+                    # Sample first product descriptions
+                    if detected_product_col and detected_product_col in chunk.columns and len(sample_products) < 5:
+                        vals = chunk[detected_product_col].dropna().astype(str).str.strip()
+                        for v in vals:
+                            nv = _norm_txt(v)
+                            if nv and nv not in {'all products','all product','all_products'}:
+                                sample_products.append(v)
+                                if len(sample_products) >= 5:
+                                    break
+
+                    # Unique sets (normalized) for counts
+                    if 'country_of_destination' in chunk.columns:
+                        for c in chunk['country_of_destination'].dropna():
+                            nc = _norm_txt(c)
+                            if nc:
+                                unique_countries.add(nc)
+                    if detected_product_col and detected_product_col in chunk.columns:
+                        for p in chunk[detected_product_col].dropna():
+                            npv = _norm_txt(p)
+                            if npv and npv not in {'all products','all product','all_products'}:
+                                unique_products.add(npv)
+
+                st.sidebar.write(f"Detected product column: {detected_product_col}")
+                st.sidebar.write(f"Sample products: {sample_products}")
+                st.sidebar.write(f"Parsed rows: {total_rows:,}")
+                st.sidebar.write(f"Value NA (coerced): {value_na:,}")
+                st.sidebar.write(f"Weight NA (coerced): {weight_na:,}")
+                st.sidebar.write(f"Sum value_fob_aud (debug): ${total_val:,.2f}")
+                st.sidebar.write(f"Sum gross_weight_tonnes (debug): {total_weight:,.2f}")
+                st.sidebar.write(f"Country count (debug): {len(unique_countries):,}")
+                st.sidebar.write(f"Product count (debug): {len(unique_products):,}")
     except Exception as e:
         st.error(f"Failed to ensure data file: {str(e)}")
         st.stop()
