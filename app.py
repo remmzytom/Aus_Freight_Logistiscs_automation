@@ -517,10 +517,10 @@ def load_exports_cleaned(path: str) -> pd.DataFrame:
 
 @st.cache_data(ttl=300)  # Reduced TTL to 5 minutes to catch data updates faster
 def compute_kpis_chunked(file_path: str, file_mtime: float = None) -> dict:
-    """Compute KPIs by processing in chunks to avoid loading full dataset into memory.
+    """Compute KPIs EXACTLY like the notebook - load cleaned CSV directly and use pandas operations.
     
     Args:
-        file_path: Path to the data file
+        file_path: Path to the data file (should be 'data/exports_cleaned.csv')
         file_mtime: File modification time (for cache invalidation). If None, will be computed.
     """
     import os
@@ -528,116 +528,26 @@ def compute_kpis_chunked(file_path: str, file_mtime: float = None) -> dict:
     if file_mtime is None:
         file_mtime = os.path.getmtime(file_path) if os.path.exists(file_path) else 0
     
-    total_value = 0.0
-    total_weight = 0.0
-    total_records = 0
-
-    # Normalized unique counters to match notebook behaviour
-    true_countries: set[str] = set()
-    true_products: set[str] = set()
-
-    # Streaming median using two heaps to match notebook (exact without loading all values)
-    # lower_half is a max-heap implemented with negative values; upper_half is a min-heap
-    import heapq
-    lower_half = []  # max-heap (store negatives)
-    upper_half = []  # min-heap
-
-    def add_value(x: float) -> None:
-        # Insert into heaps and rebalance to maintain size property
-        if not lower_half or x <= -lower_half[0]:
-            heapq.heappush(lower_half, -x)
-        else:
-            heapq.heappush(upper_half, x)
-
-        # Rebalance sizes so that len(lower) >= len(upper) and difference <= 1
-        if len(lower_half) > len(upper_half) + 1:
-            heapq.heappush(upper_half, -heapq.heappop(lower_half))
-        elif len(upper_half) > len(lower_half):
-            heapq.heappush(lower_half, -heapq.heappop(upper_half))
-
-    def current_median() -> float:
-        if not lower_half and not upper_half:
-            return 0.0
-        if len(lower_half) == len(upper_half):
-            return (-lower_half[0] + upper_half[0]) / 2.0
-        return float(-lower_half[0])
-    
-    chunk_size = 50000  # Process 50k rows at a time
-    
     try:
-        # Ensure numeric columns are properly converted
-        numeric_cols = ['value_fob_aud', 'gross_weight_tonnes']
-
-        # Prefer true product description column (fallback by column name when missing)
-        product_col = 'product_description'
-
-        # Normalizer for values
-        import re
-        def _norm_val(x: str) -> str:
-            s = re.sub(r"\s+", " ", str(x).strip()).lower()
-            return s
+        # Load EXACTLY like the notebook: df = pd.read_csv('data/exports_cleaned.csv')
+        # This is cached, so loading full file is acceptable for KPIs
+        df = pd.read_csv(file_path)
         
-        # Process in chunks (handle thousands separators like 1,234,567)
-        for chunk in pd.read_csv(file_path, chunksize=chunk_size, low_memory=False, thousands=","):
-            # If product_description column missing, try to auto-detect a matching column
-            if product_col not in chunk.columns:
-                import re
-                def _norm_colname(s: str) -> str:
-                    return re.sub(r"[^a-z0-9]", "", str(s).lower())
-                for col in chunk.columns:
-                    cn = _norm_colname(col)
-                    if 'product' in cn and 'description' in cn:
-                        product_col = col
-                        break
-
-            # Convert numeric columns, handling NaN values and stray characters
-            if 'value_fob_aud' in chunk.columns:
-                chunk['value_fob_aud'] = (
-                    chunk['value_fob_aud']
-                    .astype(str)
-                    .str.replace(r"[^0-9.\-]", "", regex=True)
-                )
-                chunk['value_fob_aud'] = pd.to_numeric(chunk['value_fob_aud'], errors='coerce').fillna(0)
-                # Sum for total and average
-                chunk_value_sum = float(chunk['value_fob_aud'].sum())
-                total_value += chunk_value_sum
-                # Stream exact median across all rows using heaps (skip zeros/NaNs)
-                for v in chunk['value_fob_aud']:
-                    if v > 0:
-                        add_value(float(v))
-            
-            if 'gross_weight_tonnes' in chunk.columns:
-                chunk['gross_weight_tonnes'] = (
-                    chunk['gross_weight_tonnes']
-                    .astype(str)
-                    .str.replace(r"[^0-9.\-]", "", regex=True)
-                )
-                chunk['gross_weight_tonnes'] = pd.to_numeric(chunk['gross_weight_tonnes'], errors='coerce').fillna(0)
-                total_weight += float(chunk['gross_weight_tonnes'].sum())
-            
-            total_records += len(chunk)
-
-            # Track unique countries (normalized)
-            if 'country_of_destination' in chunk.columns:
-                for c in chunk['country_of_destination'].dropna():
-                    n = _norm_val(c)
-                    if n:
-                        true_countries.add(n)
-
-            # Track unique products (from product_description or detected equivalent)
-            if product_col in chunk.columns:
-                prod_series = chunk[product_col]
-                for p in prod_series.dropna():
-                    n = _norm_val(p)
-                    if not n or n in {'allproducts', 'all product', 'all_product'}:
-                        continue
-                    true_products.add(n)
-            del chunk  # Explicitly delete chunk
-            gc.collect()
+        # Compute EXACTLY like the notebook:
+        # Total Export Value: df['value_fob_aud'].sum()
+        # Average: df['value_fob_aud'].mean()
+        # Median: df['value_fob_aud'].median()
+        # Total Weight: df['gross_weight_tonnes'].sum()
+        # Countries: df['country_of_destination'].nunique()
+        # Products: df['product_description'].nunique()
         
-        # Calculate exact median from heaps
-        median_val = current_median()
-        gc.collect()
+        total_value = float(df['value_fob_aud'].sum())
+        total_weight = float(df['gross_weight_tonnes'].sum())
+        total_records = len(df)
+        avg_value = float(df['value_fob_aud'].mean())
+        median_value = float(df['value_fob_aud'].median())
+        country_count = int(df['country_of_destination'].nunique())
+        product_count = int(df['product_description'].nunique())
         
         # Validate that we got reasonable data
         if total_records == 0:
@@ -650,10 +560,10 @@ def compute_kpis_chunked(file_path: str, file_mtime: float = None) -> dict:
             'total_weight': total_weight,
             'total_records': total_records,
             'total_shipments': total_records,
-            'avg_shipment_value': (total_value / total_records) if total_records > 0 else 0.0,
-            'median_shipment_value': median_val,
-            'true_country_count': len(true_countries),
-            'true_product_count': len(true_products),
+            'avg_shipment_value': avg_value,
+            'median_shipment_value': median_value,
+            'true_country_count': country_count,
+            'true_product_count': product_count,
             'file_mtime': file_mtime  # Include for cache invalidation tracking
         }
     except Exception as e:
