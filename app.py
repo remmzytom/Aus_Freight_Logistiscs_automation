@@ -568,23 +568,9 @@ def compute_kpis_chunked(file_path: str, file_mtime: float = None) -> dict:
         # Ensure numeric columns are properly converted
         numeric_cols = ['value_fob_aud', 'gross_weight_tonnes']
 
-        # Detect product column once (header sample) for robust counting
-        product_col = None
-        try:
-            sample = pd.read_csv(file_path, nrows=100, low_memory=False)
-            if 'product_description' in sample.columns:
-                product_col = 'product_description'
-            else:
-                import re
-                def _norm_col(s: str) -> str:
-                    return re.sub(r"[^a-z0-9]", "", str(s).lower())
-                for col in sample.columns:
-                    col_norm = _norm_col(col)
-                    if ('product' in col_norm or col_norm == 'sitc' or 'commodity' in col_norm) and 'description' in col_norm or col_norm == 'sitc':
-                        product_col = col
-                        break
-        except Exception:
-            product_col = None
+        # Only count true product descriptions to match notebook exactly
+        # No fallback to SITC or other columns here
+        product_col = 'product_description'
 
         # Normalizer for values
         import re
@@ -619,12 +605,9 @@ def compute_kpis_chunked(file_path: str, file_mtime: float = None) -> dict:
                         true_countries.add(n)
 
             # Track unique products with compatibility shim and exclusions
-            prod_series = None
-            if 'product_description' in chunk.columns:
-                prod_series = chunk['product_description']
-            elif product_col and product_col in chunk.columns:
+            # Count products ONLY from product_description, like the notebook
+            if product_col in chunk.columns:
                 prod_series = chunk[product_col]
-            if prod_series is not None:
                 for p in prod_series.dropna():
                     n = _norm_val(p)
                     if not n or n in {'allproducts', 'all product', 'all_product'}:
