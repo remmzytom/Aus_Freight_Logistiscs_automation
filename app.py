@@ -568,8 +568,7 @@ def compute_kpis_chunked(file_path: str, file_mtime: float = None) -> dict:
         # Ensure numeric columns are properly converted
         numeric_cols = ['value_fob_aud', 'gross_weight_tonnes']
 
-        # Only count true product descriptions to match notebook exactly
-        # No fallback to SITC or other columns here
+        # Prefer true product description column (fallback by column name when missing)
         product_col = 'product_description'
 
         # Normalizer for values
@@ -580,8 +579,24 @@ def compute_kpis_chunked(file_path: str, file_mtime: float = None) -> dict:
         
         # Process in chunks (handle thousands separators like 1,234,567)
         for chunk in pd.read_csv(file_path, chunksize=chunk_size, low_memory=False, thousands=","):
-            # Convert numeric columns, handling NaN values
+            # If product_description column missing, try to auto-detect a matching column
+            if product_col not in chunk.columns:
+                import re
+                def _norm_colname(s: str) -> str:
+                    return re.sub(r"[^a-z0-9]", "", str(s).lower())
+                for col in chunk.columns:
+                    cn = _norm_colname(col)
+                    if 'product' in cn and 'description' in cn:
+                        product_col = col
+                        break
+
+            # Convert numeric columns, handling NaN values and stray characters
             if 'value_fob_aud' in chunk.columns:
+                chunk['value_fob_aud'] = (
+                    chunk['value_fob_aud']
+                    .astype(str)
+                    .str.replace(r"[^0-9.\-]", "", regex=True)
+                )
                 chunk['value_fob_aud'] = pd.to_numeric(chunk['value_fob_aud'], errors='coerce').fillna(0)
                 # Sum for total and average
                 chunk_value_sum = float(chunk['value_fob_aud'].sum())
@@ -592,6 +607,11 @@ def compute_kpis_chunked(file_path: str, file_mtime: float = None) -> dict:
                         add_value(float(v))
             
             if 'gross_weight_tonnes' in chunk.columns:
+                chunk['gross_weight_tonnes'] = (
+                    chunk['gross_weight_tonnes']
+                    .astype(str)
+                    .str.replace(r"[^0-9.\-]", "", regex=True)
+                )
                 chunk['gross_weight_tonnes'] = pd.to_numeric(chunk['gross_weight_tonnes'], errors='coerce').fillna(0)
                 total_weight += float(chunk['gross_weight_tonnes'].sum())
             
@@ -604,8 +624,7 @@ def compute_kpis_chunked(file_path: str, file_mtime: float = None) -> dict:
                     if n:
                         true_countries.add(n)
 
-            # Track unique products with compatibility shim and exclusions
-            # Count products ONLY from product_description, like the notebook
+            # Track unique products (from product_description or detected equivalent)
             if product_col in chunk.columns:
                 prod_series = chunk[product_col]
                 for p in prod_series.dropna():
