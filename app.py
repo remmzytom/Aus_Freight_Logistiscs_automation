@@ -533,6 +533,28 @@ def compute_kpis_chunked(file_path: str, file_mtime: float = None) -> dict:
         # This is cached, so loading full file is acceptable for KPIs
         df = pd.read_csv(file_path)
         
+        # Ensure product_description exists (data cleaning notebook renames 'sitc' to 'product_description')
+        # If missing, create it from 'sitc' column to match notebook behavior
+        if 'product_description' not in df.columns:
+            if 'sitc' in df.columns:
+                df['product_description'] = df['sitc']
+            else:
+                # Fallback: try to find any column with 'product' or 'sitc' in name
+                import re
+                product_col = None
+                for col in df.columns:
+                    col_lower = re.sub(r"[^a-z0-9]", "", str(col).lower())
+                    if 'product' in col_lower and 'description' in col_lower:
+                        product_col = col
+                        break
+                    elif 'sitc' in col_lower and product_col is None:
+                        product_col = col
+                if product_col:
+                    df['product_description'] = df[product_col]
+                else:
+                    # Last resort: create a placeholder (shouldn't happen if data is properly cleaned)
+                    df['product_description'] = 'All Products'
+        
         # Compute EXACTLY like the notebook:
         # Total Export Value: df['value_fob_aud'].sum()
         # Average: df['value_fob_aud'].mean()
