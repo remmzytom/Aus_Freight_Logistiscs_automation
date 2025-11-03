@@ -672,6 +672,9 @@ def load_section_data_chunked(file_path: str, section: str, filters: dict = None
                 
                 chunk['industry_category'] = chunk['prod_descpt_code'].apply(get_industry_category)
                 
+                # Count shipments per industry in this chunk
+                industry_counts = chunk.groupby('industry_category').size()
+                
                 grouped = chunk.groupby('industry_category').agg({
                     'value_fob_aud': 'sum',
                     'gross_weight_tonnes': 'sum'
@@ -680,20 +683,22 @@ def load_section_data_chunked(file_path: str, section: str, filters: dict = None
                 for _, row in grouped.iterrows():
                     industry = row['industry_category']
                     if industry not in industry_data:
-                        industry_data[industry] = {'value_fob_aud': 0, 'gross_weight_tonnes': 0}
+                        industry_data[industry] = {'value_fob_aud': 0, 'gross_weight_tonnes': 0, 'shipment_count': 0}
                     industry_data[industry]['value_fob_aud'] += row['value_fob_aud']
                     industry_data[industry]['gross_weight_tonnes'] += row['gross_weight_tonnes']
+                    industry_data[industry]['shipment_count'] += industry_counts.get(industry, 0)
                 
                 del chunk
                 gc.collect()
             
             df = pd.DataFrame([
                 {'industry_category': k, 'value_fob_aud': v['value_fob_aud'], 
-                 'gross_weight_tonnes': v['gross_weight_tonnes']}
+                 'gross_weight_tonnes': v['gross_weight_tonnes'], 'shipment_count': v['shipment_count']}
                 for k, v in industry_data.items()
             ])
             if len(df) > 0:
                 df['value_per_tonne'] = df['value_fob_aud'] / df['gross_weight_tonnes']
+                df['avg_value'] = df['value_fob_aud'] / df['shipment_count']
             return df.sort_values('value_fob_aud', ascending=False)
         
         elif section == 'state_analysis':
@@ -1604,6 +1609,33 @@ if accurate_kpis is not None:
             fig2.update_yaxes(tickformat='$,.0f')
             st.plotly_chart(fig2)
             
+            # Chart 3: Industry Performance Summary Table
+            st.subheader("Industry Performance Summary Table")
+            if 'shipment_count' in industry_df.columns and 'avg_value' in industry_df.columns:
+                # Create formatted table
+                table_data = industry_df.copy()
+                table_data['Total Value ($B)'] = (table_data['value_fob_aud'] / 1e9).round(2)
+                table_data['Market Share (%)'] = (table_data['value_fob_aud'] / table_data['value_fob_aud'].sum() * 100).round(1)
+                table_data['Shipments (K)'] = (table_data['shipment_count'] / 1e3).round(0)
+                table_data['Avg Value/Shipment ($K)'] = (table_data['avg_value'] / 1e3).round(0)
+                
+                display_table = table_data[['industry_category', 'Total Value ($B)', 'Market Share (%)', 
+                                           'Shipments (K)', 'Avg Value/Shipment ($K)']].copy()
+                display_table = display_table.sort_values('Total Value ($B)', ascending=False)
+                
+                # Display using Streamlit table
+                st.dataframe(
+                    display_table.style.format({
+                        'Total Value ($B)': '${:.2f}B',
+                        'Market Share (%)': '{:.1f}%',
+                        'Shipments (K)': '{:.0f}K',
+                        'Avg Value/Shipment ($K)': '${:.0f}K'
+                    }).background_gradient(subset=['Total Value ($B)'], cmap='Greens')
+                    .background_gradient(subset=['Market Share (%)'], cmap='Blues'),
+                    use_container_width=True,
+                    hide_index=True
+                )
+            
         gc.collect()
     except Exception as e:
         st.error(f"Error in Industry Analysis: {str(e)}")
@@ -1664,6 +1696,55 @@ if accurate_kpis is not None:
             fig2.update_yaxes(autorange="reversed")
             fig2.update_xaxes(tickformat='$,.0f')
             st.plotly_chart(fig2)
+            
+            # Product Diversification by Country (Scatter Plot)
+            st.subheader("Product Diversification by Country")
+            # Get country-product diversity data
+            country_product_diversity = pm_data['countries'].copy()
+            country_product_diversity = country_product_diversity.rename(columns={'products_imported': 'product_description'})
+            
+            fig3 = px.scatter(country_product_diversity, x='product_description', y='value_fob_aud',
+                             size='value_fob_aud',
+                             color='value_fob_aud',
+                             title='PRODUCT DIVERSIFICATION BY COUNTRY',
+                             labels={'product_description': 'Number of Products Imported', 'value_fob_aud': 'Total Import Value (AUD)'},
+                             hover_name='country_of_destination',
+                             color_continuous_scale='viridis')
+            fig3.update_layout(
+                title_font_size=16,
+                title_font_color='#2c3e50',
+                xaxis_title_font_size=14,
+                yaxis_title_font_size=14,
+                template='plotly_white',
+                height=600
+            )
+            fig3.update_yaxes(tickformat='$,.0f')
+            st.plotly_chart(fig3)
+            
+            # Market Concentration Analysis (Pie Chart)
+            st.subheader("Market Concentration Analysis")
+            top_10_countries_pm = pm_data['countries'].head(10)
+            others_share = pm_data['countries'].iloc[10:]['value_fob_aud'].sum()
+            
+            market_share_data = list(top_10_countries_pm['value_fob_aud'].values) + [others_share]
+            market_share_labels = list(top_10_countries_pm['country_of_destination'].values) + ['Others']
+            
+            market_share_df = pd.DataFrame({
+                'Country': market_share_labels,
+                'Value': market_share_data
+            })
+            
+            fig4 = px.pie(market_share_df, values='Value', names='Country',
+                         title='MARKET CONCENTRATION (Top 10 Countries vs Others)',
+                         color_discrete_sequence=px.colors.qualitative.Set3)
+            fig4.update_layout(
+                title_font_size=16,
+                title_font_color='#2c3e50',
+                template='plotly_white',
+                height=500
+            )
+            fig4.update_traces(textposition='inside', textinfo='percent+label')
+            st.plotly_chart(fig4)
             
         gc.collect()
     except Exception as e:
@@ -1741,6 +1822,28 @@ if accurate_kpis is not None:
                 fig1.update_xaxes(tickformat='$,.0f')
                 fig1.update_traces(textposition='outside')
                 st.plotly_chart(fig1)
+                
+                # 2. LOWEST 15 VALUE PORTS (Potential Congestion Risk)
+                lowest_15_value = significant_ports.nsmallest(15, 'avg_value_per_shipment')
+                fig2 = px.bar(lowest_15_value, x='avg_value_per_shipment', y='port_of_loading',
+                             orientation='h',
+                             title='LOWEST 15 VALUE PORTS (Potential Congestion Risk)',
+                             labels={'avg_value_per_shipment': 'Average Value per Shipment ($)', 'port_of_loading': 'Port'},
+                             color='avg_value_per_shipment',
+                             color_continuous_scale='Reds',
+                             text=[format_short_value(value) for value in lowest_15_value['avg_value_per_shipment']])
+                fig2.update_layout(
+                    title_font_size=16,
+                    title_font_color='#2c3e50',
+                    xaxis_title_font_size=14,
+                    yaxis_title_font_size=14,
+                    template='plotly_white',
+                    height=600
+                )
+                fig2.update_yaxes(autorange="reversed")
+                fig2.update_xaxes(tickformat='$,.0f')
+                fig2.update_traces(textposition='outside')
+                st.plotly_chart(fig2)
             
         gc.collect()
     except Exception as e:
