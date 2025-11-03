@@ -8,6 +8,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from datetime import datetime
+import time
 import warnings
 warnings.filterwarnings('ignore')
 import gc
@@ -367,9 +368,51 @@ def ensure_data_file() -> str:
         df['month_number'] = df['month_name'].map(month_map).fillna(1)
         df = df.drop(columns=['month_name'], errors='ignore')
 
-    df.to_csv(cleaned_path, index=False)
-    st.success("✅ Data loaded and processed successfully!")
-    return cleaned_path
+    # Validate data completeness
+    if df is not None and len(df) > 0:
+        # Check if we have meaningful data
+        if 'value_fob_aud' in df.columns:
+            total_val = pd.to_numeric(df['value_fob_aud'], errors='coerce').sum()
+            if total_val > 0:
+                df.to_csv(cleaned_path, index=False)
+                st.success(f"✅ Data loaded and processed successfully! ({len(df):,} records)")
+                return cleaned_path
+            else:
+                st.warning("⚠️ Warning: Data file has zero total value. Regenerating...")
+                needs_regeneration = True
+        else:
+            st.warning("⚠️ Warning: Missing value_fob_aud column. Regenerating...")
+            needs_regeneration = True
+    
+    if needs_regeneration:
+        # If we get here and df is None or invalid, try one more time with raw file
+        raw_path = 'data/exports_2024_2025.csv'
+        if os.path.exists(raw_path):
+            import pandas as pd
+            df = pd.read_csv(raw_path)
+            if df is not None and len(df) > 0:
+                # Apply same cleaning
+                for col in ['quantity', 'gross_weight_tonnes', 'value_fob_aud']:
+                    if col in df.columns:
+                        df[col] = pd.to_numeric(df[col], errors='coerce')
+                if 'month' in df.columns and 'year' not in df.columns:
+                    df['year'] = df['month'].astype(str).str.extract(r'(\d{4})')
+                
+                if 'month' in df.columns and 'month_number' not in df.columns:
+                    month_map = {
+                        'January': 1, 'February': 2, 'March': 3, 'April': 4,
+                        'May': 5, 'June': 6, 'July': 7, 'August': 8,
+                        'September': 9, 'October': 10, 'November': 11, 'December': 12
+                    }
+                    df['month_name'] = df['month'].astype(str).str.split().str[0]
+                    df['month_number'] = df['month_name'].map(month_map).fillna(1)
+                    df = df.drop(columns=['month_name'], errors='ignore')
+                
+                df.to_csv(cleaned_path, index=False)
+                st.success(f"✅ Data loaded from backup file! ({len(df):,} records)")
+                return cleaned_path
+    
+    raise FileNotFoundError("No valid data available and automatic download failed")
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
@@ -472,9 +515,19 @@ def load_exports_cleaned(path: str) -> pd.DataFrame:
         return pd.DataFrame()  # Return empty dataframe on error
 
 
-@st.cache_data(ttl=600)
-def compute_kpis_chunked(file_path: str) -> dict:
-    """Compute KPIs by processing in chunks to avoid loading full dataset into memory."""
+@st.cache_data(ttl=300)  # Reduced TTL to 5 minutes to catch data updates faster
+def compute_kpis_chunked(file_path: str, file_mtime: float = None) -> dict:
+    """Compute KPIs by processing in chunks to avoid loading full dataset into memory.
+    
+    Args:
+        file_path: Path to the data file
+        file_mtime: File modification time (for cache invalidation). If None, will be computed.
+    """
+    import os
+    # Include file modification time for cache invalidation
+    if file_mtime is None:
+        file_mtime = os.path.getmtime(file_path) if os.path.exists(file_path) else 0
+    
     total_value = 0.0
     total_weight = 0.0
     total_records = 0
@@ -483,14 +536,25 @@ def compute_kpis_chunked(file_path: str) -> dict:
     chunk_size = 50000  # Process 50k rows at a time
     
     try:
+        # Ensure numeric columns are properly converted
+        numeric_cols = ['value_fob_aud', 'gross_weight_tonnes']
+        
         # Process in chunks
-        for chunk in pd.read_csv(file_path, chunksize=chunk_size):
+        for chunk in pd.read_csv(file_path, chunksize=chunk_size, low_memory=False):
+            # Convert numeric columns, handling NaN values
             if 'value_fob_aud' in chunk.columns:
-                total_value += float(chunk['value_fob_aud'].sum())
+                chunk['value_fob_aud'] = pd.to_numeric(chunk['value_fob_aud'], errors='coerce').fillna(0)
+                chunk_value_sum = float(chunk['value_fob_aud'].sum())
+                total_value += chunk_value_sum
                 # Sample values for median (every 100th record to save memory)
-                value_list.extend(chunk['value_fob_aud'].iloc[::100].tolist())
+                valid_values = chunk['value_fob_aud'][chunk['value_fob_aud'] > 0]
+                if len(valid_values) > 0:
+                    value_list.extend(valid_values.iloc[::100].tolist())
+            
             if 'gross_weight_tonnes' in chunk.columns:
+                chunk['gross_weight_tonnes'] = pd.to_numeric(chunk['gross_weight_tonnes'], errors='coerce').fillna(0)
                 total_weight += float(chunk['gross_weight_tonnes'].sum())
+            
             total_records += len(chunk)
             del chunk  # Explicitly delete chunk
             gc.collect()
@@ -500,16 +564,25 @@ def compute_kpis_chunked(file_path: str) -> dict:
         del value_list
         gc.collect()
         
+        # Validate that we got reasonable data
+        if total_records == 0:
+            st.warning("⚠️ No records found in data file. Data might be incomplete.")
+        elif total_value == 0:
+            st.warning("⚠️ Total export value is zero. Data might be incomplete.")
+        
         return {
             'total_value': total_value,
             'total_weight': total_weight,
             'total_records': total_records,
             'total_shipments': total_records,
             'avg_shipment_value': (total_value / total_records) if total_records > 0 else 0.0,
-            'median_shipment_value': median_val
+            'median_shipment_value': median_val,
+            'file_mtime': file_mtime  # Include for cache invalidation tracking
         }
     except Exception as e:
         st.error(f"Error computing KPIs: {str(e)}")
+        import traceback
+        st.code(traceback.format_exc())
         return None
 
 
@@ -518,7 +591,10 @@ def load_kpis_only():
     """Load only KPIs (no full dataset) - efficient for memory."""
     try:
         file_path = ensure_data_file()
-        accurate_kpis = compute_kpis_chunked(file_path)
+        # Get file modification time for cache invalidation
+        import os
+        file_mtime = os.path.getmtime(file_path) if os.path.exists(file_path) else 0
+        accurate_kpis = compute_kpis_chunked(file_path, file_mtime)
         return accurate_kpis
     except Exception as e:
         st.error(f"Error computing KPIs: {str(e)}")
@@ -1080,6 +1156,30 @@ if accurate_kpis is not None:
     # Get file path for lazy loading
     try:
         file_path = ensure_data_file()
+        
+        # Display data file info for transparency
+        import os
+        if os.path.exists(file_path):
+            file_size = os.path.getsize(file_path) / (1024 * 1024)  # Size in MB
+            file_age = (time.time() - os.path.getmtime(file_path)) / (60 * 60 * 24)  # Age in days
+            st.sidebar.markdown("---")
+            st.sidebar.markdown("**Data File Info**")
+            st.sidebar.write(f"Size: {file_size:.1f} MB")
+            st.sidebar.write(f"Age: {file_age:.1f} days")
+            st.sidebar.write(f"Records: {accurate_kpis['total_records']:,}")
+            
+            # Add refresh button
+            if st.sidebar.button("🔄 Force Refresh Data"):
+                # Clear Streamlit cache
+                st.cache_data.clear()
+                # Remove old files to force regeneration
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+                raw_path = 'data/exports_2024_2025.csv'
+                if os.path.exists(raw_path):
+                    os.remove(raw_path)
+                st.success("Data refresh initiated. Reloading...")
+                st.rerun()
     except Exception as e:
         st.error(f"Failed to ensure data file: {str(e)}")
         st.stop()
