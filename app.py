@@ -1094,20 +1094,56 @@ if accurate_kpis is not None:
         """Get unique values for filters without loading full dataset."""
         countries = set()
         products = set()
+        states = set()
         min_date = None
         max_date = None
         
+        # First, identify the product column name by reading a small sample
+        sample = pd.read_csv(file_path, nrows=100, low_memory=False)
+        product_col = None
+        if 'product_description' in sample.columns:
+            product_col = 'product_description'
+        else:
+            import re
+            def _norm(s): return re.sub(r"[^a-z0-9]", "", str(s).lower())
+            for col in sample.columns:
+                col_norm = _norm(col)
+                if any(x in col_norm for x in ['product', 'sitc', 'commodity']) and 'description' in col_norm:
+                    product_col = col
+                    break
+            if not product_col:
+                # Fallback: check for any column with 'product' or 'sitc'
+                for col in sample.columns:
+                    col_norm = _norm(col)
+                    if 'product' in col_norm or col_norm == 'sitc':
+                        product_col = col
+                        break
+        
         chunk_size = 50000
-        for chunk in pd.read_csv(file_path, chunksize=chunk_size, low_memory=False, usecols=[
-            'country_of_destination', 'product_description', 'month', 'year'
-        ] if all(c in pd.read_csv(file_path, nrows=0).columns for c in ['country_of_destination', 'product_description', 'month', 'year']) 
-        else None):
+        # Get all required columns - don't limit usecols since we need to check for product_description compatibility
+        chunk_count = 0
+        for chunk in pd.read_csv(file_path, chunksize=chunk_size, low_memory=False):
+            # Ensure product_description exists (same compatibility shim as other sections)
+            if 'product_description' not in chunk.columns:
+                if product_col and product_col in chunk.columns:
+                    chunk['product_description'] = chunk[product_col].astype(str)
+                else:
+                    import re
+                    def _norm(s): return re.sub(r"[^a-z0-9]", "", str(s).lower())
+                    candidates = [c for c in chunk.columns if _norm(c) in {'productdescription', 'product_description', 'sitc'}]
+                    if candidates:
+                        chunk['product_description'] = chunk[candidates[0]].astype(str)
+                    else:
+                        chunk['product_description'] = 'All Products'
+            
             if 'country_of_destination' in chunk.columns:
                 countries.update(chunk['country_of_destination'].dropna().unique())
             if 'product_description' in chunk.columns:
                 products.update(chunk['product_description'].dropna().unique())
+            if 'state_of_origin' in chunk.columns:
+                states.update(chunk['state_of_origin'].dropna().unique())
             # Get date range
-            if 'year' in chunk.columns and 'month' in chunk.columns:
+            if 'year' in chunk.columns:
                 chunk_years = chunk['year'].dropna().unique()
                 if len(chunk_years) > 0:
                     if min_date is None or min(chunk_years) < min_date:
@@ -1115,12 +1151,28 @@ if accurate_kpis is not None:
                     if max_date is None or max(chunk_years) > max_date:
                         max_date = max(chunk_years)
             
-            if len(countries) > 1000:  # Limit to prevent memory issues
+            chunk_count += 1
+            # Process all chunks to get accurate unique counts
+            # Sets are memory-efficient, so we can process all data
+            # Only break if we have excessive unique values (safety limit)
+            if len(countries) > 1000 or len(products) > 10000:
                 break
+            
+            del chunk
+            gc.collect()
+        
+        # Return all unique counts for display, but limit lists for dropdowns
+        total_products = len(products)
+        total_countries = len(countries)
+        total_states = len(states)
         
         return {
-            'countries': sorted(list(countries))[:500],  # Limit to top 500
-            'products': sorted(list(products))[:500],
+            'countries': sorted(list(countries))[:500],  # Limit to top 500 for dropdown
+            'products': sorted(list(products))[:500],  # Limit to top 500 for dropdown
+            'states': sorted(list(states)),
+            'total_products': total_products,  # Full count for display
+            'total_countries': total_countries,  # Full count for display
+            'total_states': total_states,  # Full count for display
             'min_year': int(min_date) if min_date else 2024,
             'max_year': int(max_date) if max_date else 2025
         }
@@ -1195,7 +1247,7 @@ if accurate_kpis is not None:
         st.markdown(f"""
         <div class="metric-card">
             <h3>Countries</h3>
-            <h2>{len(filter_options['countries'])}</h2>
+            <h2>{filter_options.get('total_countries', len(filter_options['countries']))}</h2>
             <p>Export Destinations</p>
         </div>
         """, unsafe_allow_html=True)
@@ -1204,7 +1256,7 @@ if accurate_kpis is not None:
         st.markdown(f"""
         <div class="metric-card">
             <h3>Products</h3>
-            <h2>{len(filter_options['products'])}</h2>
+            <h2>{filter_options.get('total_products', len(filter_options['products']))}</h2>
             <p>Product Types</p>
         </div>
         """, unsafe_allow_html=True)
@@ -1212,9 +1264,9 @@ if accurate_kpis is not None:
     with col4:
         st.markdown(f"""
         <div class="metric-card">
-            <h3>Date Range</h3>
-            <h2>{filter_options['max_year'] - filter_options['min_year'] + 1}</h2>
-            <p>Years of Data</p>
+            <h3>States</h3>
+            <h2>{filter_options.get('total_states', len(filter_options['states']))}</h2>
+            <p>Export States</p>
         </div>
         """, unsafe_allow_html=True)
     
