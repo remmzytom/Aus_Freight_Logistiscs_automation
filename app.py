@@ -531,7 +531,32 @@ def compute_kpis_chunked(file_path: str, file_mtime: float = None) -> dict:
     total_value = 0.0
     total_weight = 0.0
     total_records = 0
-    value_list = []  # For median calculation
+
+    # Streaming median using two heaps to match notebook (exact without loading all values)
+    # lower_half is a max-heap implemented with negative values; upper_half is a min-heap
+    import heapq
+    lower_half = []  # max-heap (store negatives)
+    upper_half = []  # min-heap
+
+    def add_value(x: float) -> None:
+        # Insert into heaps and rebalance to maintain size property
+        if not lower_half or x <= -lower_half[0]:
+            heapq.heappush(lower_half, -x)
+        else:
+            heapq.heappush(upper_half, x)
+
+        # Rebalance sizes so that len(lower) >= len(upper) and difference <= 1
+        if len(lower_half) > len(upper_half) + 1:
+            heapq.heappush(upper_half, -heapq.heappop(lower_half))
+        elif len(upper_half) > len(lower_half):
+            heapq.heappush(lower_half, -heapq.heappop(upper_half))
+
+    def current_median() -> float:
+        if not lower_half and not upper_half:
+            return 0.0
+        if len(lower_half) == len(upper_half):
+            return (-lower_half[0] + upper_half[0]) / 2.0
+        return float(-lower_half[0])
     
     chunk_size = 50000  # Process 50k rows at a time
     
@@ -544,12 +569,13 @@ def compute_kpis_chunked(file_path: str, file_mtime: float = None) -> dict:
             # Convert numeric columns, handling NaN values
             if 'value_fob_aud' in chunk.columns:
                 chunk['value_fob_aud'] = pd.to_numeric(chunk['value_fob_aud'], errors='coerce').fillna(0)
+                # Sum for total and average
                 chunk_value_sum = float(chunk['value_fob_aud'].sum())
                 total_value += chunk_value_sum
-                # Sample values for median (every 100th record to save memory)
-                valid_values = chunk['value_fob_aud'][chunk['value_fob_aud'] > 0]
-                if len(valid_values) > 0:
-                    value_list.extend(valid_values.iloc[::100].tolist())
+                # Stream exact median across all rows using heaps (skip zeros/NaNs)
+                for v in chunk['value_fob_aud']:
+                    if v > 0:
+                        add_value(float(v))
             
             if 'gross_weight_tonnes' in chunk.columns:
                 chunk['gross_weight_tonnes'] = pd.to_numeric(chunk['gross_weight_tonnes'], errors='coerce').fillna(0)
@@ -559,9 +585,8 @@ def compute_kpis_chunked(file_path: str, file_mtime: float = None) -> dict:
             del chunk  # Explicitly delete chunk
             gc.collect()
         
-        # Calculate median from sampled values
-        median_val = float(pd.Series(value_list).median()) if value_list else 0.0
-        del value_list
+        # Calculate exact median from heaps
+        median_val = current_median()
         gc.collect()
         
         # Validate that we got reasonable data
