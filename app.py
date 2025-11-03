@@ -532,6 +532,10 @@ def compute_kpis_chunked(file_path: str, file_mtime: float = None) -> dict:
     total_weight = 0.0
     total_records = 0
 
+    # Normalized unique counters to match notebook behaviour
+    true_countries: set[str] = set()
+    true_products: set[str] = set()
+
     # Streaming median using two heaps to match notebook (exact without loading all values)
     # lower_half is a max-heap implemented with negative values; upper_half is a min-heap
     import heapq
@@ -563,6 +567,30 @@ def compute_kpis_chunked(file_path: str, file_mtime: float = None) -> dict:
     try:
         # Ensure numeric columns are properly converted
         numeric_cols = ['value_fob_aud', 'gross_weight_tonnes']
+
+        # Detect product column once (header sample) for robust counting
+        product_col = None
+        try:
+            sample = pd.read_csv(file_path, nrows=100, low_memory=False)
+            if 'product_description' in sample.columns:
+                product_col = 'product_description'
+            else:
+                import re
+                def _norm_col(s: str) -> str:
+                    return re.sub(r"[^a-z0-9]", "", str(s).lower())
+                for col in sample.columns:
+                    col_norm = _norm_col(col)
+                    if ('product' in col_norm or col_norm == 'sitc' or 'commodity' in col_norm) and 'description' in col_norm or col_norm == 'sitc':
+                        product_col = col
+                        break
+        except Exception:
+            product_col = None
+
+        # Normalizer for values
+        import re
+        def _norm_val(x: str) -> str:
+            s = re.sub(r"\s+", " ", str(x).strip()).lower()
+            return s
         
         # Process in chunks
         for chunk in pd.read_csv(file_path, chunksize=chunk_size, low_memory=False):
@@ -582,6 +610,26 @@ def compute_kpis_chunked(file_path: str, file_mtime: float = None) -> dict:
                 total_weight += float(chunk['gross_weight_tonnes'].sum())
             
             total_records += len(chunk)
+
+            # Track unique countries (normalized)
+            if 'country_of_destination' in chunk.columns:
+                for c in chunk['country_of_destination'].dropna():
+                    n = _norm_val(c)
+                    if n:
+                        true_countries.add(n)
+
+            # Track unique products with compatibility shim and exclusions
+            prod_series = None
+            if 'product_description' in chunk.columns:
+                prod_series = chunk['product_description']
+            elif product_col and product_col in chunk.columns:
+                prod_series = chunk[product_col]
+            if prod_series is not None:
+                for p in prod_series.dropna():
+                    n = _norm_val(p)
+                    if not n or n in {'allproducts', 'all product', 'all_product'}:
+                        continue
+                    true_products.add(n)
             del chunk  # Explicitly delete chunk
             gc.collect()
         
@@ -602,6 +650,8 @@ def compute_kpis_chunked(file_path: str, file_mtime: float = None) -> dict:
             'total_shipments': total_records,
             'avg_shipment_value': (total_value / total_records) if total_records > 0 else 0.0,
             'median_shipment_value': median_val,
+            'true_country_count': len(true_countries),
+            'true_product_count': len(true_products),
             'file_mtime': file_mtime  # Include for cache invalidation tracking
         }
     except Exception as e:
@@ -1372,7 +1422,7 @@ if accurate_kpis is not None:
         st.markdown(f"""
         <div class="metric-card">
             <h3>Countries</h3>
-            <h2>{filter_options.get('total_countries', len(filter_options['countries']))}</h2>
+            <h2>{accurate_kpis.get('true_country_count', filter_options.get('total_countries', len(filter_options['countries'])))}</h2>
             <p>Export Destinations</p>
         </div>
         """, unsafe_allow_html=True)
@@ -1381,7 +1431,7 @@ if accurate_kpis is not None:
         st.markdown(f"""
         <div class="metric-card">
             <h3>Products</h3>
-            <h2>{filter_options.get('total_products', len(filter_options['products']))}</h2>
+            <h2>{accurate_kpis.get('true_product_count', filter_options.get('total_products', len(filter_options['products'])))}</h2>
             <p>Product Types</p>
         </div>
         """, unsafe_allow_html=True)
