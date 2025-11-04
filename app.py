@@ -509,7 +509,8 @@ def load_exports_cleaned(path: str, columns: list = None, filters: dict = None) 
     
     # Essential columns that must be loaded for compatibility
     essential_cols = ['month', 'year', 'month_number', 'value_fob_aud', 'gross_weight_tonnes', 
-                      'quantity', 'country_of_destination', 'product_description', 'prod_descpt_code']
+                      'quantity', 'country_of_destination', 'product_description', 'prod_descpt_code',
+                      'port_of_loading']
     
     # If columns specified, ensure essential columns are included
     if columns:
@@ -718,7 +719,8 @@ try:
         # NOTE: 'date' is derived (created from year + month_number), not in CSV
         essential_columns = ['year', 'month', 'month_number', 'value_fob_aud', 
                             'gross_weight_tonnes', 'quantity', 'country_of_destination', 
-                            'product_description', 'prod_descpt_code', 'state_of_origin']
+                            'product_description', 'prod_descpt_code', 'state_of_origin',
+                            'port_of_loading']
         df, accurate_kpis = load_data(columns=essential_columns)  # Load only essential columns
         
         # Ensure 'date' column exists (it's created during chunk processing)
