@@ -282,6 +282,7 @@ st.markdown("""
 # Load data function with accurate KPIs and fast dashboard
 def ensure_data_file() -> str:
     """Ensure cleaned data file exists and is fresh (auto-refreshes if >30 days old).
+    - First checks if cleaned file from notebook exists (preferred)
     - If missing: generate immediately
     - If older than 30 days: regenerate from ABS website
     Returns the relative path to the cleaned CSV.
@@ -292,31 +293,33 @@ def ensure_data_file() -> str:
 
     cleaned_path = 'data/exports_cleaned.csv'
     
-    # Check if file exists and if it needs refresh (>30 days old) or is missing required columns
-    needs_regeneration = False
+    # Check if cleaned file exists and is fresh (from notebook or previous generation)
     if os.path.exists(cleaned_path):
         # Check file age
         file_age_days = (time.time() - os.path.getmtime(cleaned_path)) / (60 * 60 * 24)
-        if file_age_days > 30:
-            st.info(f"Data is {int(file_age_days)} days old. Refreshing from ABS website...")
-            needs_regeneration = True
-        else:
-            # Check if file has required columns (month_number might be missing from old files)
+        
+        # If file is less than 30 days old, check if it has required columns
+        if file_age_days <= 30:
             try:
                 import pandas as pd
                 sample_df = pd.read_csv(cleaned_path, nrows=1)
-                if 'month_number' not in sample_df.columns:
-                    st.info("Updating data format (adding missing columns)...")
-                    needs_regeneration = True
-                elif not needs_regeneration:
-                    # File exists, is fresh, and has required columns - return it
+                # Check if it has all required columns
+                required_cols = ['month_number', 'year', 'value_fob_aud', 'gross_weight_tonnes']
+                if all(col in sample_df.columns for col in required_cols):
+                    # File exists, is fresh, and has required columns - use it
                     return cleaned_path
+                else:
+                    # Missing required columns, need to regenerate
+                    st.info("Updating data format (adding missing columns)...")
             except Exception:
-                # File might be corrupted, regenerate
-                needs_regeneration = True
-    else:
-        # File doesn't exist - need to generate
-        needs_regeneration = True
+                # File might be corrupted, will regenerate
+                pass
+        else:
+            # File is older than 30 days
+            st.info(f"Data is {int(file_age_days)} days old. Refreshing from ABS website...")
+    
+    # If we get here, we need to regenerate
+    needs_regeneration = True
 
     # Try to generate raw exports and produce a minimal cleaned file
     extract_func = None
@@ -347,11 +350,40 @@ def ensure_data_file() -> str:
     if df is None:
         raise FileNotFoundError("No data available and automatic download failed")
 
-    # Minimal cleaning compatible with dashboard expectations
+    # Comprehensive cleaning to match notebook process
     import pandas as pd
-    for col in ['quantity', 'gross_weight_tonnes', 'value_fob_aud']:
+    
+    # Rename columns if needed (match notebook)
+    if 'sitc' in df.columns and 'product_description' not in df.columns:
+        df = df.rename(columns={'sitc': 'product_description'})
+    if 'sitc_code' in df.columns and 'prod_descpt_code' not in df.columns:
+        df = df.rename(columns={'sitc_code': 'prod_descpt_code'})
+    
+    # Convert numeric columns and handle missing/negative values (match notebook)
+    numeric_columns = ['quantity', 'gross_weight_tonnes', 'value_fob_aud']
+    for col in numeric_columns:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors='coerce')
+            # Fill missing with 0 (match notebook)
+            df[col] = df[col].fillna(0)
+            # Convert negative values to 0 (match notebook)
+            df[col] = df[col].clip(lower=0)
+    
+    # Fill missing text values (match notebook)
+    text_columns = ['country_of_destination', 'product_description']
+    for col in text_columns:
+        if col in df.columns:
+            df[col] = df[col].fillna('Unknown')
+    
+    # Clean product descriptions (match notebook)
+    if 'product_description' in df.columns:
+        df['product_description'] = df['product_description'].astype(str).str.strip()
+        df['product_description'] = df['product_description'].str.replace(r'\s+', ' ', regex=True)
+        df['product_description'] = df['product_description'].str.replace(r'[\n\r\t]+', ' ', regex=True)
+        df['product_description'] = df['product_description'].str.replace('"', '', regex=False)
+        df['product_description'] = df['product_description'].str.replace("'", '', regex=False)
+    
+    # Extract year if missing
     if 'month' in df.columns and 'year' not in df.columns:
         df['year'] = df['month'].astype(str).str.extract(r'(\d{4})')
     
@@ -366,6 +398,13 @@ def ensure_data_file() -> str:
         df['month_name'] = df['month'].astype(str).str.split().str[0]
         df['month_number'] = df['month_name'].map(month_map).fillna(1)
         df = df.drop(columns=['month_name'], errors='ignore')
+    
+    # Remove duplicates (match notebook)
+    initial_count = len(df)
+    df = df.drop_duplicates()
+    duplicates_removed = initial_count - len(df)
+    if duplicates_removed > 0:
+        st.info(f"Removed {duplicates_removed:,} duplicate rows")
 
     df.to_csv(cleaned_path, index=False)
     st.success("Data loaded and processed successfully!")
