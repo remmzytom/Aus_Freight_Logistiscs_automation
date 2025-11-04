@@ -1079,52 +1079,47 @@ if df is not None and accurate_kpis is not None:
         
         # Top export destinations (per-session cached)
         top_countries = _session_get('top_countries', _KEY, agg_top_countries)
-    
-    # Check if we have data for the selected date range
-    if len(top_countries) > 0:
-        top_countries['value_billions'] = top_countries['value_fob_aud'] / 1e9
-        top_countries['pct'] = (top_countries['value_fob_aud'] / top_countries['value_fob_aud'].sum() * 100)
-    else:
-        st.warning("No data available for the selected date range. Please adjust your date filter.")
-    
-    # Display top 15 countries
-    # Clean presentation - visualization shows the data
-    
-    # Interactive Visualization with Value Labels (No Percentage)
-    top_15 = top_countries.head(15).reset_index()
-    
-    fig = px.bar(top_15, x='value_billions', y='country_of_destination',
-                 orientation='h',
-                 title='Top 15 Countries by Export Value',
-                 labels={'value_billions': 'Export Value (Billion AUD)', 'country_of_destination': 'Country'},
-                 color='value_billions',
-                 color_continuous_scale='Greens')
-    fig.update_traces(
-        text=[f"${value:.1f}B" for value in top_15['value_billions']],
-        textposition='outside'
-    )
-    
-    fig.update_layout(
-        title_font_size=16,
-        title_font_color='#2c3e50',
-        xaxis_title_font_size=14,
-        yaxis_title_font_size=14,
-        template='plotly_white',
-        height=600,
-        showlegend=False
-    )
-    fig.update_yaxes(autorange="reversed")
-    fig.update_xaxes(tickformat='$,.1f')
-    
-    # Update text positioning and styling
-    fig.update_traces(
-        textposition='outside',
-        textfont=dict(size=10, color='#2c3e50'),
-        hovertemplate='<b>%{y}</b><br>Export Value: $%{x:.1f}B<extra></extra>'
-    )
-    
-    st.plotly_chart(fig)
-    del fig; gc.collect()
+        
+        # Check if we have data for the selected date range
+        if len(top_countries) > 0:
+            top_countries['value_billions'] = top_countries['value_fob_aud'] / 1e9
+            top_countries['pct'] = (top_countries['value_fob_aud'] / top_countries['value_fob_aud'].sum() * 100)
+            
+            # Interactive Visualization with Value Labels (No Percentage)
+            top_15 = top_countries.head(15).reset_index()
+            if len(top_15) > 0:
+                fig = px.bar(top_15, x='value_billions', y='country_of_destination',
+                             orientation='h',
+                             title='Top 15 Countries by Export Value',
+                             labels={'value_billions': 'Export Value (Billion AUD)', 'country_of_destination': 'Country'},
+                             color='value_billions',
+                             color_continuous_scale='Greens')
+                fig.update_traces(
+                    text=[f"${value:.1f}B" for value in top_15['value_billions']],
+                    textposition='outside'
+                )
+                fig.update_layout(
+                    title_font_size=16,
+                    title_font_color='#2c3e50',
+                    xaxis_title_font_size=14,
+                    yaxis_title_font_size=14,
+                    template='plotly_white',
+                    height=600,
+                    showlegend=False
+                )
+                fig.update_yaxes(autorange="reversed")
+                fig.update_xaxes(tickformat='$,.1f')
+                fig.update_traces(
+                    textposition='outside',
+                    textfont=dict(size=10, color='#2c3e50'),
+                    hovertemplate='<b>%{y}</b><br>Export Value: $%{x:.1f}B<extra></extra>'
+                )
+                st.plotly_chart(fig)
+                del fig; gc.collect()
+            else:
+                st.info("No countries to display for the selected filters.")
+        else:
+            st.warning("No data available for the selected date range. Please adjust your date filter.")
     
     # 4. PRODUCT ANALYSIS (from your notebook Cell 11)
     top_products = pd.DataFrame(columns=['value_fob_aud','gross_weight_tonnes'])
