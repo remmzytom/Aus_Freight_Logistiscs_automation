@@ -585,7 +585,28 @@ def load_exports_cleaned(path: str, columns: list = None, filters: dict = None) 
                         if isinstance(values, list):
                             chunk = chunk[chunk[col].isin(values)]
                         elif isinstance(values, tuple) and len(values) == 2:
-                            chunk = chunk[(chunk[col] >= values[0]) & (chunk[col] <= values[1])]
+                            # Coerce to comparable types (handle datetime range safely)
+                            left, right = values
+                            try:
+                                if np.issubdtype(chunk[col].dtype, np.datetime64):
+                                    left_ts = pd.to_datetime(left)
+                                    right_ts = pd.to_datetime(right)
+                                    chunk = chunk[(chunk[col] >= left_ts) & (chunk[col] <= right_ts)]
+                                else:
+                                    # Try to parse to datetime if the column is date-like strings
+                                    if col == 'date':
+                                        left_ts = pd.to_datetime(left)
+                                        right_ts = pd.to_datetime(right)
+                                        col_dt = pd.to_datetime(chunk[col], errors='coerce')
+                                        chunk = chunk[(col_dt >= left_ts) & (col_dt <= right_ts)]
+                                    else:
+                                        chunk = chunk[(chunk[col] >= left) & (chunk[col] <= right)]
+                            except Exception:
+                                # Fallback safe filter without crashing
+                                try:
+                                    chunk = chunk[(chunk[col] >= values[0]) & (chunk[col] <= values[1])]
+                                except Exception:
+                                    pass
                         if len(chunk) == 0:
                             continue
             
