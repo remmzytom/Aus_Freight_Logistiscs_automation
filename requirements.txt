@@ -12,3 +12,4 @@ xlrd
 schedule
 scikit-learn
 Pillow
+psutil

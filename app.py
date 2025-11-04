@@ -11,10 +11,28 @@ from datetime import datetime
 import warnings
 warnings.filterwarnings('ignore')
 import gc
+import psutil
+import os
 
 # Disable Pillow decompression bomb check
 from PIL import Image
 Image.MAX_IMAGE_PIXELS = None
+
+# Memory monitoring utility
+def get_memory_usage():
+    """Get current memory usage in MB"""
+    try:
+        process = psutil.Process(os.getpid())
+        return process.memory_info().rss / 1024 / 1024  # Convert to MB
+    except:
+        return 0
+
+def log_memory(stage=""):
+    """Log memory usage at different stages"""
+    mem_mb = get_memory_usage()
+    if mem_mb > 0:
+        st.sidebar.caption(f"Memory: {mem_mb:.1f} MB {stage}")
+    return mem_mb
 
 # Set up plotting style (from your notebook)
 plt.style.use('seaborn-v0_8-darkgrid')
@@ -475,16 +493,41 @@ def ensure_data_file() -> str:
     return cleaned_path
 
 
-@st.cache_data(ttl=3600, show_spinner=False)
-def load_exports_cleaned(path: str) -> pd.DataFrame:
-    """Load all columns in chunks, add compatibility shims, and downcast numerics to save RAM."""
+@st.cache_data(ttl=300, max_entries=2, show_spinner=False)  # Reduced TTL to 5 min, limit cache entries
+def load_exports_cleaned(path: str, columns: list = None, filters: dict = None) -> pd.DataFrame:
+    """Load columns in chunks, add compatibility shims, and downcast numerics to save RAM.
+    
+    Args:
+        path: Path to CSV file
+        columns: List of columns to load (None = all columns)
+        filters: Dict of filters to apply at CSV level (e.g., {'year': [2024, 2025]})
+    """
     # Load in chunks to avoid memory issues with large datasets
     chunk_size = 100000  # 100k rows at a time
     chunks = []
     df_combined = None
     
+    # Essential columns that must be loaded for compatibility
+    essential_cols = ['month', 'year', 'month_number', 'value_fob_aud', 'gross_weight_tonnes', 
+                      'quantity', 'country_of_destination', 'product_description', 'prod_descpt_code']
+    
+    # If columns specified, ensure essential columns are included
+    if columns:
+        columns = list(set(columns + essential_cols))
+    
     try:
-        for chunk in pd.read_csv(path, chunksize=chunk_size):
+        for chunk in pd.read_csv(path, chunksize=chunk_size, usecols=columns if columns else None):
+            # Apply filters at CSV level if provided (Phase 2 optimization)
+            if filters:
+                for col, values in filters.items():
+                    if col in chunk.columns:
+                        if isinstance(values, list):
+                            chunk = chunk[chunk[col].isin(values)]
+                        elif isinstance(values, tuple) and len(values) == 2:
+                            # Range filter
+                            chunk = chunk[(chunk[col] >= values[0]) & (chunk[col] <= values[1])]
+                        if len(chunk) == 0:
+                            continue
             # Apply transformations to each chunk
             # Ensure month_number exists
             if 'month_number' not in chunk.columns and 'month' in chunk.columns:
@@ -555,6 +598,11 @@ def load_exports_cleaned(path: str) -> pd.DataFrame:
         del chunks, df_combined
         gc.collect()
         
+        # Memory monitoring
+        mem_after = get_memory_usage()
+        if mem_after > 500:  # Log if memory > 500MB
+            st.sidebar.warning(f"High memory usage: {mem_after:.1f} MB after loading data")
+        
         return df
     except Exception as e:
         st.error(f"Error loading data file: {str(e)}")
@@ -563,7 +611,7 @@ def load_exports_cleaned(path: str) -> pd.DataFrame:
         return pd.DataFrame()  # Return empty dataframe on error
 
 
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=300, max_entries=2)  # Reduced TTL to 5 min, limit cache entries
 def compute_kpis_chunked(file_path: str) -> dict:
     """Compute KPIs by processing in chunks to avoid loading full dataset into memory."""
     total_value = 0.0
@@ -604,9 +652,9 @@ def compute_kpis_chunked(file_path: str) -> dict:
         return None
 
 
-@st.cache_data(ttl=600)
-def load_data():
-    """Efficiently load dataset - use lazy loading for large datasets."""
+@st.cache_data(ttl=300, max_entries=2)  # Reduced TTL to 5 min, limit cache entries
+def load_data(columns: list = None, filters: dict = None):
+    """Efficiently load dataset - use lazy loading with column selection and filtering."""
     try:
         file_path = ensure_data_file()
         
@@ -615,10 +663,17 @@ def load_data():
         if accurate_kpis is None:
             return None, None
         
-        # Now load the full dataset with optimizations
-        df = load_exports_cleaned(file_path)
+        # Now load the dataset with optimizations (Phase 2: filter at CSV level)
+        df = load_exports_cleaned(file_path, columns=columns, filters=filters)
         
+        # Aggressive cleanup
         gc.collect()
+        
+        # Memory monitoring
+        mem_usage = get_memory_usage()
+        if mem_usage > 800:  # Warning if > 800MB
+            st.sidebar.error(f"⚠️ High memory: {mem_usage:.1f} MB")
+        
         return df, accurate_kpis
     except Exception as e:
         st.error(f"Error loading data: {str(e)}")
@@ -635,16 +690,25 @@ except Exception as e:
     st.stop()
 
 if df is not None and accurate_kpis is not None:
-    # Helper function to safely execute sections
+    # Helper function to safely execute sections with memory management
     def safe_execute(func, section_name):
-        """Execute a function with error handling to prevent crashes."""
+        """Execute a function with error handling and aggressive memory cleanup."""
         try:
+            mem_before = get_memory_usage()
             func()
-            gc.collect()  # Clean up after each section
+            # Aggressive cleanup after each section (Phase 1)
+            gc.collect()
+            gc.collect()  # Second call to ensure cleanup
+            mem_after = get_memory_usage()
+            
+            # Log memory spike if significant
+            if mem_after > mem_before + 100:  # More than 100MB increase
+                st.sidebar.warning(f"⚠️ {section_name}: +{mem_after - mem_before:.1f} MB")
         except Exception as e:
             st.error(f"Error in {section_name}: {str(e)}")
             import traceback
             st.code(traceback.format_exc())
+            gc.collect()  # Cleanup even on error
     
     # Final compatibility guard: ensure 'product_description' exists even if cached data is old
     if 'product_description' not in df.columns:
@@ -671,8 +735,20 @@ if df is not None and accurate_kpis is not None:
     # Cache clear button
     if st.sidebar.button("Clear Cache & Reload Data", help="Clear cached data and force fresh data reload"):
         st.cache_data.clear()
+        gc.collect()
+        gc.collect()  # Double cleanup
         st.success("Cache cleared! Refreshing...")
         st.rerun()
+    
+    # Memory monitoring display (Phase 1)
+    st.sidebar.markdown("---")
+    mem_current = get_memory_usage()
+    if mem_current > 0:
+        st.sidebar.metric("Memory Usage", f"{mem_current:.1f} MB")
+        if mem_current > 700:
+            st.sidebar.error("⚠️ High memory usage!")
+        elif mem_current > 500:
+            st.sidebar.warning("⚠️ Moderate memory usage")
     
     st.sidebar.markdown("---")
     
@@ -1126,6 +1202,8 @@ if df is not None and accurate_kpis is not None:
     fig.update_xaxes(tickformat='$,.0f')
     
     st.plotly_chart(fig)
+    del fig  # Cleanup after chart rendering (Phase 1)
+    gc.collect()
     
     # 4.5. INDUSTRY CATEGORY ANALYSIS (EXACT from your notebook) - Using FULL dataset
     st.markdown('<h2 class="section-header">Industry Category Analysis</h2>', unsafe_allow_html=True)
@@ -1186,6 +1264,10 @@ if df is not None and accurate_kpis is not None:
         'gross_weight_tonnes': 'sum',
         'value_per_tonne': 'mean'
     }).round(2)
+    
+    # Cleanup intermediate dataframe (Phase 1)
+    del df_full_industry
+    gc.collect()
     
     # Flatten column names
     industry_analysis.columns = ['Total_Value', 'Shipment_Count', 'Avg_Value', 'Total_Weight', 'Avg_Value_per_Tonne']
