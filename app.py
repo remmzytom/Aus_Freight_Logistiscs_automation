@@ -763,12 +763,9 @@ try:
 
         # Date range
         if filter_opts and filter_opts.get('min_date') and filter_opts.get('max_date'):
-            min_d = filter_opts['min_date']
-            max_d = filter_opts['max_date']
+            min_d, max_d = get_full_date_range(file_path)
         else:
-            # Fallback dates if sample failed
-            min_d = datetime(2024, 1, 1).date()
-            max_d = datetime(2025, 12, 1).date()
+            min_d, max_d = get_full_date_range(file_path)
         st.sidebar.subheader("Date Range")
         date_range = st.sidebar.date_input("Select Date Range", value=(min_d, max_d), min_value=min_d)
 
@@ -849,6 +846,7 @@ if df is not None and accurate_kpis is not None:
     mem_current = get_memory_usage()
     if mem_current > 0:
         st.sidebar.metric("Memory Usage", f"{mem_current:.1f} MB")
+        st.sidebar.metric("Rows Loaded", f"{len(df):,}")
         if mem_current > 700:
             st.sidebar.error("⚠️ High memory usage!")
         elif mem_current > 500:
@@ -2444,4 +2442,35 @@ if df is not None and accurate_kpis is not None:
 
 else:
     st.error("Unable to load data. Please check your data file and try again.")
+
+@st.cache_data(ttl=300)
+def get_full_date_range(file_path: str):
+    """Compute min/max date across the entire file cheaply using only year/month_number columns."""
+    try:
+        min_year = None
+        min_month = None
+        max_year = None
+        max_month = None
+        for chunk in pd.read_csv(file_path, usecols=['year', 'month_number'], chunksize=100000):
+            # Coerce types
+            chunk['year'] = pd.to_numeric(chunk['year'], errors='coerce')
+            chunk['month_number'] = pd.to_numeric(chunk['month_number'], errors='coerce')
+            chunk = chunk.dropna(subset=['year', 'month_number'])
+            if len(chunk) == 0:
+                continue
+            cmin = chunk[['year', 'month_number']].min()
+            cmax = chunk[['year', 'month_number']].max()
+            if min_year is None or (cmin['year'] < min_year) or (cmin['year'] == min_year and cmin['month_number'] < min_month):
+                min_year = int(cmin['year'])
+                min_month = int(cmin['month_number'])
+            if max_year is None or (cmax['year'] > max_year) or (cmax['year'] == max_year and cmax['month_number'] > max_month):
+                max_year = int(cmax['year'])
+                max_month = int(cmax['month_number'])
+        if min_year is not None and max_year is not None:
+            min_d = datetime(min_year, min_month, 1).date()
+            max_d = datetime(max_year, max_month, 1).date()
+            return (min_d, max_d)
+        return (datetime(2024, 1, 1).date(), datetime(2025, 12, 1).date())
+    except Exception:
+        return (datetime(2024, 1, 1).date(), datetime(2025, 12, 1).date())
 
