@@ -852,8 +852,10 @@ if df is not None and accurate_kpis is not None:
     # Filter data based on date range
     if len(date_range) == 2:
         start_date, end_date = date_range
+        original_df_size = len(df)
         df = df[(df['date'].dt.date >= start_date) & (df['date'].dt.date <= end_date)].copy()
     else:
+        original_df_size = len(df)
         df = df.copy()
     
     # Apply country filter
@@ -864,21 +866,11 @@ if df is not None and accurate_kpis is not None:
     if 'All Products' not in selected_products and selected_products:
         df = df[df['product_description'].isin(selected_products)].copy()
     
-    # CRITICAL: Delete full df immediately after filtering to free memory
-    original_df_size = len(df)
+    # Report filter effect (without deleting df)
     filtered_df_size = len(df)
-    del df
-    gc.collect()
-    gc.collect()  # Double cleanup
-    
-    # Memory monitoring after filtering
-    mem_after_filter = get_memory_usage()
-    if mem_after_filter > 0:
+    if original_df_size > 0:
         st.sidebar.info(f"Filtered: {original_df_size:,} → {filtered_df_size:,} rows ({100*filtered_df_size/original_df_size:.1f}%)")
-    
-    # Rename df to df for consistency throughout codebase
-    df = df
-    del df
+    gc.collect()
     
     # Main dashboard content
     
