@@ -1300,38 +1300,74 @@ if df is not None and accurate_kpis is not None:
     # Reset index to make Industry a regular column for better sorting/filtering
     display_table = display_table.reset_index(drop=True)
     
-    # Display as interactive, sortable, and searchable table using Streamlit
-    st.dataframe(
-        display_table,
-        use_container_width=True,
-        hide_index=True,
-        column_config={
-            'Industry': st.column_config.TextColumn(
-                'Industry',
-                width='medium',
-                help='Industry category'
-            ),
-            'Total Value ($B)': st.column_config.NumberColumn(
-                'Total Value ($B)',
-                format='%.2f',
-                help='Total export value in billions of AUD'
-            ),
-            'Market Share (%)': st.column_config.NumberColumn(
-                'Market Share (%)',
-                format='%.1f',
-                help='Percentage of total market share'
-            ),
-            'Shipments (K)': st.column_config.NumberColumn(
-                'Shipments (K)',
-                format='%.0f',
-                help='Number of shipments in thousands'
-            ),
-            'Avg Value/Shipment ($K)': st.column_config.NumberColumn(
-                'Avg Value/Shipment ($K)',
-                format='%.0f',
-                help='Average value per shipment in thousands of AUD'
-            )
+    # Apply styling with lighter colors - alternating rows with soft pastel colors
+    def style_table(row):
+        """Apply alternating row colors with lighter pastel shades"""
+        # Soft pastel colors for alternating rows
+        colors = ['#F5F7FA', '#FFFFFF']  # Very light grey-blue and white
+        return [f'background-color: {colors[row.name % 2]}' for _ in row]
+    
+    # Style the table with lighter pastel colors
+    styled_table = display_table.style.apply(style_table, axis=1).format({
+        'Total Value ($B)': '{:.2f}',
+        'Market Share (%)': '{:.1f}',
+        'Shipments (K)': '{:.0f}',
+        'Avg Value/Shipment ($K)': '{:.0f}'
+    }).background_gradient(
+        subset=['Total Value ($B)'],
+        cmap='Blues',
+        vmin=display_table['Total Value ($B)'].min(),
+        vmax=display_table['Total Value ($B)'].max()
+    ).set_table_styles([
+        {
+            'selector': 'thead th',
+            'props': [
+                ('background-color', '#E8F4F8'),  # Very light blue header
+                ('color', '#2C5282'),  # Soft blue text
+                ('font-weight', '600'),
+                ('text-align', 'center'),
+                ('padding', '12px 8px'),
+                ('border-bottom', '2px solid #BEE3F8'),
+                ('font-size', '14px')
+            ]
+        },
+        {
+            'selector': 'tbody tr:hover',
+            'props': [
+                ('background-color', '#E0F2FE'),  # Very light cyan on hover
+            ]
+        },
+        {
+            'selector': 'td',
+            'props': [
+                ('padding', '10px 8px'),
+                ('text-align', 'center'),
+                ('border-bottom', '1px solid #E2E8F0'),  # Light grey border
+                ('font-size', '13px')
+            ]
+        },
+        {
+            'selector': 'tbody tr:nth-of-type(even)',
+            'props': [
+                ('background-color', '#F7FAFC')  # Very light grey-blue for even rows
+            ]
+        },
+        {
+            'selector': 'tbody tr:nth-of-type(odd)',
+            'props': [
+                ('background-color', '#FFFFFF')  # Pure white for odd rows
+            ]
         }
+    ]).set_properties(**{
+        'font-size': '13px',
+        'font-family': 'Segoe UI, Arial, sans-serif'
+    })
+    
+    # Display styled table using Streamlit
+    st.dataframe(
+        styled_table,
+        use_container_width=True,
+        hide_index=True
     )
     
     # Clean dashboard - no unnecessary text
