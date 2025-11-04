@@ -718,78 +718,6 @@ if df is not None and accurate_kpis is not None:
     if 'All Products' not in selected_products and selected_products:
         df_filtered = df_filtered[df_filtered['product_description'].isin(selected_products)]
     
-    # ------------------------------------------------------------------
-    # Per-session lazy loaders (no buttons): memoize aggregates per filter set
-    # ------------------------------------------------------------------
-    def _filters_key() -> str:
-        try:
-            c = tuple(sorted(x for x in selected_countries if x != 'All Countries')) if selected_countries else ()
-            p = tuple(sorted(x for x in selected_products if x != 'All Products')) if selected_products else ()
-            d0 = str(start_date) if len(date_range) == 2 else ''
-            d1 = str(end_date) if len(date_range) == 2 else ''
-            return f"d:{d0}:{d1}|c:{hash(c)}|p:{hash(p)}"
-        except Exception:
-            # Fallback: minimal key to avoid crashes
-            return str(datetime.now().date())
-
-    def _session_get(name: str, key: str, compute_fn):
-        store = st.session_state.setdefault('_lazy_store', {})
-        entry = store.get(name)
-        if not entry or entry.get('key') != key:
-            value = compute_fn()
-            store[name] = {'key': key, 'value': value}
-            st.session_state['_lazy_store'] = store
-            return value
-        return entry['value']
-
-    _KEY = _filters_key()
-
-    # Aggregation helpers (each returns a compact dataframe)
-    def agg_time_series_monthly():
-        if {'year','month_number','value_fob_aud','gross_weight_tonnes'}.issubset(df_filtered.columns):
-            df_ts = df_filtered[df_filtered['month_number'].notna() & df_filtered['year'].notna()].copy()
-            if 'month' not in df_ts.columns:
-                month_names = {1:'January',2:'February',3:'March',4:'April',5:'May',6:'June',7:'July',8:'August',9:'September',10:'October',11:'November',12:'December'}
-                df_ts['month'] = df_ts['month_number'].map(month_names).fillna('Unknown')
-            m = df_ts.groupby(['year','month_number','month']).agg({'value_fob_aud':'sum','gross_weight_tonnes':'sum'}).reset_index().sort_values(['year','month_number'])
-            del df_ts; gc.collect()
-            return m
-        return pd.DataFrame()
-
-    def agg_top_countries():
-        g = df_filtered.groupby('country_of_destination').agg({'value_fob_aud':'sum','gross_weight_tonnes':'sum'}).sort_values('value_fob_aud', ascending=False)
-        return g
-
-    def agg_top_products():
-        g = df_filtered.groupby('product_description').agg({'value_fob_aud':'sum','gross_weight_tonnes':'sum'}).sort_values('value_fob_aud', ascending=False)
-        return g
-
-    def agg_industry():
-        dfi = df_filtered.copy()
-        if 'prod_descpt_code' not in dfi.columns:
-            if 'sitc_code' in dfi.columns:
-                dfi['prod_descpt_code'] = dfi['sitc_code'].astype(str)
-            else:
-                dfi['prod_descpt_code'] = ''
-        def _cat(sitc_code):
-            if pd.isna(sitc_code) or sitc_code == '':
-                return 'Other Commodities'
-            first = str(sitc_code).strip()[0] if len(str(sitc_code).strip())>=1 else '9'
-            mapping = {'0':'Food & Agriculture','1':'Beverages & Tobacco','2':'Raw Materials & Mining','3':'Energy & Petroleum','4':'Food Processing','5':'Chemicals & Pharmaceuticals','6':'Manufactured Goods and materials','7':'Machinery & Equipment','8':'Consumer Goods','9':'Other Commodities'}
-            return mapping.get(first,'Other Commodities')
-        dfi['industry_category'] = dfi['prod_descpt_code'].apply(_cat)
-        ia = dfi.groupby('industry_category').agg({'value_fob_aud':['sum','count','mean'],'gross_weight_tonnes':'sum','value_per_tonne':'mean'}).round(2)
-        ia.columns = ['Total_Value','Shipment_Count','Avg_Value','Total_Weight','Avg_Value_per_Tonne']
-        ia = ia.sort_values('Total_Value', ascending=False)
-        total_val = ia['Total_Value'].sum()
-        ia['Value_Percentage'] = (ia['Total_Value']/total_val*100).round(1) if total_val>0 else 0
-        del dfi; gc.collect()
-        return ia
-
-    def agg_ports():
-        gp = df_filtered.groupby('port_of_loading')['gross_weight_tonnes'].sum().reset_index()
-        return gp.sort_values('gross_weight_tonnes', ascending=False)
-
     # Main dashboard content
     
     # 1. DATASET SUMMARY (from your notebook Cell 4)
@@ -911,25 +839,35 @@ if df is not None and accurate_kpis is not None:
         """, unsafe_allow_html=True)
     
     # 2. TIME SERIES ANALYSIS (from your notebook Cell 6)
-    # On-demand lazy render
-    if 'load_ts' not in st.session_state:
-        st.session_state['load_ts'] = False
-    with st.expander("Time Series Analysis (click to load)", expanded=False):
-        if st.button("Load Time Series", key="btn_ts"):
-            st.session_state['load_ts'] = True
-    if st.session_state['load_ts']:
+    try:
         st.markdown('<h2 class="section-header">Time Series Analysis</h2>', unsafe_allow_html=True)
         
         # Check required columns exist
         required_cols = ['year', 'month_number', 'value_fob_aud', 'gross_weight_tonnes']
         missing_cols = [col for col in required_cols if col not in df_filtered.columns]
         if not missing_cols:
-            # Use per-session cached monthly aggregate
-            monthly = _session_get('ts_monthly', _KEY, agg_time_series_monthly)
+            # Ensure month_number and year are not NaN for grouping
+            df_ts = df_filtered[df_filtered['month_number'].notna() & df_filtered['year'].notna()].copy()
             
-            if len(monthly) == 0:
+            if len(df_ts) == 0:
                 st.warning("No valid date data available for time series analysis.")
             else:
+                # Monthly trends - handle month column (may be missing or in different format)
+                if 'month' in df_ts.columns:
+                    group_cols = ['year', 'month_number', 'month']
+                else:
+                    # Create month name from month_number if month column is missing
+                    month_names = {1: 'January', 2: 'February', 3: 'March', 4: 'April',
+                                   5: 'May', 6: 'June', 7: 'July', 8: 'August',
+                                   9: 'September', 10: 'October', 11: 'November', 12: 'December'}
+                    df_ts['month'] = df_ts['month_number'].map(month_names).fillna('Unknown')
+                    group_cols = ['year', 'month_number', 'month']
+                
+                monthly = df_ts.groupby(group_cols).agg({
+                    'value_fob_aud': 'sum',
+                    'gross_weight_tonnes': 'sum'
+                }).reset_index().sort_values(['year', 'month_number'])
+                
                 # Check if we have data for the selected date range
                 if len(monthly) > 0:
                     # Safely create period string
@@ -1061,6 +999,10 @@ if df is not None and accurate_kpis is not None:
                     st.warning("No data available for the selected date range. Please adjust your date filter.")
         else:
             st.warning(f"Missing required columns for time series analysis: {missing_cols}")
+    except Exception as e:
+        st.error(f"Error in Time Series Analysis: {str(e)}")
+        import traceback
+        st.code(traceback.format_exc())
     
     # Clean up memory after time series section
     gc.collect()
@@ -1068,72 +1010,67 @@ if df is not None and accurate_kpis is not None:
     # Clean presentation - no redundant tables
     
     # 3. COUNTRY ANALYSIS (from your notebook Cell 9)
-    top_countries = pd.DataFrame(columns=['value_fob_aud','gross_weight_tonnes'])
-    if 'load_country' not in st.session_state:
-        st.session_state['load_country'] = False
-    with st.expander("Country Analysis (click to load)", expanded=False):
-        if st.button("Load Country Analysis", key="btn_country"):
-            st.session_state['load_country'] = True
-    if st.session_state['load_country']:
-        st.markdown('<h2 class="section-header">Country Analysis</h2>', unsafe_allow_html=True)
-        
-        # Top export destinations (per-session cached)
-        top_countries = _session_get('top_countries', _KEY, agg_top_countries)
-        
-        # Check if we have data for the selected date range
-        if len(top_countries) > 0:
-            top_countries['value_billions'] = top_countries['value_fob_aud'] / 1e9
-            top_countries['pct'] = (top_countries['value_fob_aud'] / top_countries['value_fob_aud'].sum() * 100)
-            
-            # Interactive Visualization with Value Labels (No Percentage)
-            top_15 = top_countries.head(15).reset_index()
-            if len(top_15) > 0:
-                fig = px.bar(top_15, x='value_billions', y='country_of_destination',
-                             orientation='h',
-                             title='Top 15 Countries by Export Value',
-                             labels={'value_billions': 'Export Value (Billion AUD)', 'country_of_destination': 'Country'},
-                             color='value_billions',
-                             color_continuous_scale='Greens')
-                fig.update_traces(
-                    text=[f"${value:.1f}B" for value in top_15['value_billions']],
-                    textposition='outside'
-                )
-                fig.update_layout(
-                    title_font_size=16,
-                    title_font_color='#2c3e50',
-                    xaxis_title_font_size=14,
-                    yaxis_title_font_size=14,
-                    template='plotly_white',
-                    height=600,
-                    showlegend=False
-                )
-                fig.update_yaxes(autorange="reversed")
-                fig.update_xaxes(tickformat='$,.1f')
-                fig.update_traces(
-                    textposition='outside',
-                    textfont=dict(size=10, color='#2c3e50'),
-                    hovertemplate='<b>%{y}</b><br>Export Value: $%{x:.1f}B<extra></extra>'
-                )
-                st.plotly_chart(fig)
-                del fig; gc.collect()
-            else:
-                st.info("No countries to display for the selected filters.")
-        else:
-            st.warning("No data available for the selected date range. Please adjust your date filter.")
+    st.markdown('<h2 class="section-header">Country Analysis</h2>', unsafe_allow_html=True)
+    
+    # Top export destinations (exact code from your notebook)
+    top_countries = df_filtered.groupby('country_of_destination').agg({
+        'value_fob_aud': 'sum',
+        'gross_weight_tonnes': 'sum'
+    }).sort_values('value_fob_aud', ascending=False)
+    
+    # Check if we have data for the selected date range
+    if len(top_countries) > 0:
+        top_countries['value_billions'] = top_countries['value_fob_aud'] / 1e9
+        top_countries['pct'] = (top_countries['value_fob_aud'] / top_countries['value_fob_aud'].sum() * 100)
+    else:
+        st.warning("No data available for the selected date range. Please adjust your date filter.")
+    
+    # Display top 15 countries
+    # Clean presentation - visualization shows the data
+    
+    # Interactive Visualization with Value Labels (No Percentage)
+    top_15 = top_countries.head(15).reset_index()
+    
+    fig = px.bar(top_15, x='value_billions', y='country_of_destination',
+                 orientation='h',
+                 title='Top 15 Countries by Export Value',
+                 labels={'value_billions': 'Export Value (Billion AUD)', 'country_of_destination': 'Country'},
+                 color='value_billions',
+                 color_continuous_scale='Greens')
+    fig.update_traces(
+        text=[f"${value:.1f}B" for value in top_15['value_billions']],
+        textposition='outside'
+    )
+    
+    fig.update_layout(
+        title_font_size=16,
+        title_font_color='#2c3e50',
+        xaxis_title_font_size=14,
+        yaxis_title_font_size=14,
+        template='plotly_white',
+        height=600,
+        showlegend=False
+    )
+    fig.update_yaxes(autorange="reversed")
+    fig.update_xaxes(tickformat='$,.1f')
+    
+    # Update text positioning and styling
+    fig.update_traces(
+        textposition='outside',
+        textfont=dict(size=10, color='#2c3e50'),
+        hovertemplate='<b>%{y}</b><br>Export Value: $%{x:.1f}B<extra></extra>'
+    )
+    
+    st.plotly_chart(fig)
     
     # 4. PRODUCT ANALYSIS (from your notebook Cell 11)
-    top_products = pd.DataFrame(columns=['value_fob_aud','gross_weight_tonnes'])
-    top_20_display = pd.DataFrame(columns=['Product','Value ($B)','Weight (M Tonnes)','% Total'])
-    if 'load_product' not in st.session_state:
-        st.session_state['load_product'] = False
-    with st.expander("Product Analysis (click to load)", expanded=False):
-        if st.button("Load Product Analysis", key="btn_product"):
-            st.session_state['load_product'] = True
-    if st.session_state['load_product']:
-        st.markdown('<h2 class="section-header">Product Analysis</h2>', unsafe_allow_html=True)
-        
-        # Top 20 products by value (per-session cached)
-        top_products = _session_get('top_products', _KEY, agg_top_products)
+    st.markdown('<h2 class="section-header">Product Analysis</h2>', unsafe_allow_html=True)
+    
+    # Top 20 products by value (exact code from your notebook)
+    top_products = df_filtered.groupby('product_description').agg({
+        'value_fob_aud': 'sum',
+        'gross_weight_tonnes': 'sum'
+    }).sort_values('value_fob_aud', ascending=False)
 
     # Create clean display columns (rounded to 2 decimal places)
     top_products['Value ($B)'] = (top_products['value_fob_aud'] / 1e9).round(2)
@@ -1189,19 +1126,74 @@ if df is not None and accurate_kpis is not None:
     fig.update_xaxes(tickformat='$,.0f')
     
     st.plotly_chart(fig)
-    del fig; gc.collect()
     
     # 4.5. INDUSTRY CATEGORY ANALYSIS (EXACT from your notebook) - Using FULL dataset
-    if 'load_industry' not in st.session_state:
-        st.session_state['load_industry'] = False
-    with st.expander("Industry Category Analysis (click to load)", expanded=False):
-        if st.button("Load Industry Analysis", key="btn_industry"):
-            st.session_state['load_industry'] = True
-    if st.session_state['load_industry']:
-        st.markdown('<h2 class="section-header">Industry Category Analysis</h2>', unsafe_allow_html=True)
+    st.markdown('<h2 class="section-header">Industry Category Analysis</h2>', unsafe_allow_html=True)
+    
+    # Use the main dataset for accurate industry analysis (same as other sections)
+    
+    # Use the filtered dataset to respect date range selection
+    df_full_industry = df_filtered.copy()
+    
+    # SITC Code-based Product Categorization - Clean presentation
+
+    # Ensure the expected code column exists; map from 'sitc_code' when available
+    if 'prod_descpt_code' not in df_full_industry.columns:
+        if 'sitc_code' in df_full_industry.columns:
+            df_full_industry['prod_descpt_code'] = df_full_industry['sitc_code'].astype(str)
+        else:
+            df_full_industry['prod_descpt_code'] = ''
+
+    # Import SITC mapping and create sitc_category column
+    try:
+        from sitc_mapping import SITC_MAPPING
         
-        # Use per-session cached industry aggregation
-        industry_analysis = _session_get('industry_analysis', _KEY, agg_industry)
+        def get_sitc_section(sitc_code):
+            if pd.isna(sitc_code) or sitc_code == '':
+                return 'Other Commodities'
+            sitc_str = str(sitc_code).strip()
+            if len(sitc_str) >= 2:
+                section_code = sitc_str[:2]
+                return SITC_MAPPING.get(section_code, 'Other Commodities')
+            return 'Other Commodities'
+        
+        df_full_industry['sitc_category'] = df_full_industry['prod_descpt_code'].apply(get_sitc_section)
+        # Clean dashboard - no unnecessary text
+    except ImportError:
+        st.warning("SITC mapping module not found, using fallback categorization")
+        df_full_industry['sitc_category'] = 'Other Commodities'
+    
+    # Create Stakeholder-Friendly Industry Categories (EXACT from your notebook)
+    # Clean dashboard - no unnecessary text
+    
+    # Map SITC code to industry category using first digit
+    def get_industry_category(sitc_code):
+        if pd.isna(sitc_code) or sitc_code == '':
+            return 'Other Commodities'
+        first_digit = str(sitc_code).strip()[0] if len(str(sitc_code).strip()) >= 1 else '9'
+        mapping = {'0': 'Food & Agriculture', '1': 'Beverages & Tobacco', '2': 'Raw Materials & Mining', 
+                   '3': 'Energy & Petroleum', '4': 'Food Processing', '5': 'Chemicals & Pharmaceuticals',
+                   '6': 'Manufactured Goods and materials', '7': 'Machinery & Equipment', 
+                   '8': 'Consumer Goods', '9': 'Other Commodities'}
+        return mapping.get(first_digit, 'Other Commodities')
+    
+    df_full_industry['industry_category'] = df_full_industry['prod_descpt_code'].apply(get_industry_category)
+    # Clean dashboard - no unnecessary text
+    
+    # Analyze by industry category (EXACT from your notebook)
+    industry_analysis = df_full_industry.groupby('industry_category').agg({
+        'value_fob_aud': ['sum', 'count', 'mean'],
+        'gross_weight_tonnes': 'sum',
+        'value_per_tonne': 'mean'
+    }).round(2)
+    
+    # Flatten column names
+    industry_analysis.columns = ['Total_Value', 'Shipment_Count', 'Avg_Value', 'Total_Weight', 'Avg_Value_per_Tonne']
+    industry_analysis = industry_analysis.sort_values('Total_Value', ascending=False)
+    
+    # Calculate percentages
+    total_value = industry_analysis['Total_Value'].sum()
+    industry_analysis['Value_Percentage'] = (industry_analysis['Total_Value'] / total_value * 100).round(1)
     
     # Clean presentation - show only visualizations
     
@@ -1246,7 +1238,6 @@ if df is not None and accurate_kpis is not None:
     )
     
     st.plotly_chart(fig1)
-    del fig1, top_industries; gc.collect()
     
     # Chart 2: Industry Value Density (Interactive) - EXACT from your notebook
     st.subheader("Industry Value Density (Value per Tonne Shipped)")
@@ -1285,7 +1276,6 @@ if df is not None and accurate_kpis is not None:
     )
     
     st.plotly_chart(fig2)
-    del fig2, value_density_industry; gc.collect()
     
     # Chart 3: Dynamic Interactive Performance Summary Table
     st.subheader("Industry Performance Summary Table")
@@ -1310,13 +1300,75 @@ if df is not None and accurate_kpis is not None:
     # Reset index to make Industry a regular column for better sorting/filtering
     display_table = display_table.reset_index(drop=True)
     
-    # Lightweight table to minimize memory
+    # Apply styling with lighter colors - alternating rows with soft pastel colors
+    def style_table(row):
+        """Apply alternating row colors with lighter pastel shades"""
+        # Soft pastel colors for alternating rows
+        colors = ['#F5F7FA', '#FFFFFF']  # Very light grey-blue and white
+        return [f'background-color: {colors[row.name % 2]}' for _ in row]
+    
+    # Style the table with lighter pastel colors
+    styled_table = display_table.style.apply(style_table, axis=1).format({
+        'Total Value ($B)': '{:.2f}',
+        'Market Share (%)': '{:.1f}',
+        'Shipments (K)': '{:.0f}',
+        'Avg Value/Shipment ($K)': '{:.0f}'
+    }).background_gradient(
+        subset=['Total Value ($B)'],
+        cmap='Blues',
+        vmin=display_table['Total Value ($B)'].min(),
+        vmax=display_table['Total Value ($B)'].max()
+    ).set_table_styles([
+        {
+            'selector': 'thead th',
+            'props': [
+                ('background-color', '#E8F4F8'),  # Very light blue header
+                ('color', '#2C5282'),  # Soft blue text
+                ('font-weight', '600'),
+                ('text-align', 'center'),
+                ('padding', '12px 8px'),
+                ('border-bottom', '2px solid #BEE3F8'),
+                ('font-size', '14px')
+            ]
+        },
+        {
+            'selector': 'tbody tr:hover',
+            'props': [
+                ('background-color', '#E0F2FE'),  # Very light cyan on hover
+            ]
+        },
+        {
+            'selector': 'td',
+            'props': [
+                ('padding', '10px 8px'),
+                ('text-align', 'center'),
+                ('border-bottom', '1px solid #E2E8F0'),  # Light grey border
+                ('font-size', '13px')
+            ]
+        },
+        {
+            'selector': 'tbody tr:nth-of-type(even)',
+            'props': [
+                ('background-color', '#F7FAFC')  # Very light grey-blue for even rows
+            ]
+        },
+        {
+            'selector': 'tbody tr:nth-of-type(odd)',
+            'props': [
+                ('background-color', '#FFFFFF')  # Pure white for odd rows
+            ]
+        }
+    ]).set_properties(**{
+        'font-size': '13px',
+        'font-family': 'Segoe UI, Arial, sans-serif'
+    })
+    
+    # Display styled table using Streamlit
     st.dataframe(
-        display_table.head(50),
+        styled_table,
         use_container_width=True,
         hide_index=True
     )
-    del display_table, table_data; gc.collect()
     
     # Clean dashboard - no unnecessary text
     
@@ -1466,18 +1518,22 @@ if df is not None and accurate_kpis is not None:
     # Clean dashboard - no unnecessary text
     
     # 4.7. TOP 15 PORTS BY TONNAGE (EXACT from your notebook)
-    if 'load_ports' not in st.session_state:
-        st.session_state['load_ports'] = False
-    with st.expander("Top 15 Ports by Tonnage (click to load)", expanded=False):
-        if st.button("Load Ports Analysis", key="btn_ports"):
-            st.session_state['load_ports'] = True
-    if st.session_state['load_ports']:
-        st.markdown('<h2 class="section-header">Top 15 Ports by Tonnage</h2>', unsafe_allow_html=True)
-        
-        # Group by port of loading and calculate total tonnage (cached per session)
-        port_tonnage = _session_get('ports_tonnage', _KEY, agg_ports).copy()
-        port_tonnage['tonnage_millions'] = port_tonnage['gross_weight_tonnes'] / 1e6
-        top_15_ports = port_tonnage.head(15)
+    st.markdown('<h2 class="section-header">Top 15 Ports by Tonnage</h2>', unsafe_allow_html=True)
+    
+    # Use filtered dataset for Port Analysis to respect date range selection
+    df_full_ports = df_filtered.copy()
+    
+    # Add calculated fields to match your notebook
+    df_full_ports['date'] = pd.to_datetime(df_full_ports['year'].astype(str) + '-' + df_full_ports['month_number'].astype(str).str.zfill(2) + '-01')
+    df_full_ports['value_per_tonne'] = df_full_ports['value_fob_aud'] / df_full_ports['gross_weight_tonnes']
+    
+    # Clean dashboard - no unnecessary text
+    
+    # Group by port of loading and calculate total tonnage
+    port_tonnage = df_full_ports.groupby('port_of_loading')['gross_weight_tonnes'].sum().reset_index()
+    port_tonnage = port_tonnage.sort_values('gross_weight_tonnes', ascending=False)
+    port_tonnage['tonnage_millions'] = port_tonnage['gross_weight_tonnes'] / 1e6
+    top_15_ports = port_tonnage.head(15)
     
     # Clean dashboard - no unnecessary text
     
