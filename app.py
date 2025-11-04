@@ -578,6 +578,17 @@ def load_exports_cleaned(path: str, columns: list = None, filters: dict = None) 
             if {'value_fob_aud','gross_weight_tonnes'}.issubset(chunk.columns):
                 chunk['value_per_tonne'] = chunk['value_fob_aud'] / chunk['gross_weight_tonnes']
             
+            # Apply filters AFTER deriving fields (so 'date' works)
+            if filters:
+                for col, values in filters.items():
+                    if col in chunk.columns:
+                        if isinstance(values, list):
+                            chunk = chunk[chunk[col].isin(values)]
+                        elif isinstance(values, tuple) and len(values) == 2:
+                            chunk = chunk[(chunk[col] >= values[0]) & (chunk[col] <= values[1])]
+                        if len(chunk) == 0:
+                            continue
+            
             chunks.append(chunk)
             # Combine chunks in batches to reduce memory spikes
             if len(chunks) >= 3:  # Reduced to 3 chunks (150k rows) to reduce memory spikes
@@ -714,18 +725,61 @@ def load_data(columns: list = None, filters: dict = None):
 
 # Load data with error handling - CRITICAL: Load only essential columns to reduce memory
 try:
-    with st.spinner('Loading data... This may take a moment for the full dataset.'):
+    file_path = ensure_data_file()
+    # Build sidebar filters from a cheap sample (lazy setup)
+    filter_opts = get_filter_options(file_path)
+    with st.spinner('Preparing filters...'):
         # Define essential columns only - don't load unnecessary columns
         # NOTE: 'date' is derived (created from year + month_number), not in CSV
         essential_columns = ['year', 'month', 'month_number', 'value_fob_aud', 
                             'gross_weight_tonnes', 'quantity', 'country_of_destination', 
                             'product_description', 'prod_descpt_code', 'state_of_origin',
                             'port_of_loading', 'mode_of_transport']
-        df, accurate_kpis = load_data(columns=essential_columns)  # Load only essential columns
-        
-        # Ensure 'date' column exists (it's created during chunk processing)
-        if 'date' not in df.columns and 'year' in df.columns and 'month_number' in df.columns:
-            df['date'] = pd.to_datetime(df['year'].astype(str) + '-' + df['month_number'].astype(str).str.zfill(2) + '-01')
+
+        # Sidebar controls
+        st.sidebar.header("Dashboard Controls")
+        st.sidebar.markdown('---')
+
+        # Date range
+        if filter_opts and filter_opts.get('min_date') and filter_opts.get('max_date'):
+            min_d = filter_opts['min_date']
+            max_d = filter_opts['max_date']
+        else:
+            # Fallback dates if sample failed
+            min_d = datetime(2024, 1, 1).date()
+            max_d = datetime(2025, 12, 1).date()
+        st.sidebar.subheader("Date Range")
+        date_range = st.sidebar.date_input("Select Date Range", value=(min_d, max_d), min_value=min_d)
+
+        # Country filter (use sample options to avoid loading all values)
+        st.sidebar.subheader("Country Filter")
+        country_options = ['All Countries'] + (filter_opts.get('countries') if filter_opts else [])
+        selected_countries = st.sidebar.multiselect("Select Countries", options=country_options, default=['All Countries'])
+
+        # Product filter (sample options)
+        st.sidebar.subheader("Product Filter")
+        product_options = ['All Products'] + (filter_opts.get('products') if filter_opts else [])
+        selected_products = st.sidebar.multiselect("Select Products", options=product_options, default=['All Products'])
+
+        # Build filters dict for CSV-level filtering inside chunked loader
+        filters = {}
+        if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
+            filters['date'] = (date_range[0], date_range[1])
+        if 'All Countries' not in selected_countries and selected_countries:
+            filters['country_of_destination'] = selected_countries
+        if 'All Products' not in selected_products and selected_products:
+            filters['product_description'] = selected_products
+
+    # Now lazily load only filtered data
+    with st.spinner('Loading filtered data...'):
+        df, accurate_kpis = load_data(columns=essential_columns, filters=filters)
+
+    # Ensure 'date' column exists (it's created during chunk processing)
+    if 'date' not in df.columns and 'year' in df.columns and 'month_number' in df.columns:
+        df['date'] = pd.to_datetime(df['year'].astype(str) + '-' + df['month_number'].astype(str).str.zfill(2) + '-01')
+
+    # Memory log after lazy load
+    log_memory("after lazy load")
 except Exception as e:
     st.error(f"Failed to load data: {str(e)}")
     st.stop()
@@ -750,7 +804,7 @@ if df is not None and accurate_kpis is not None:
             import traceback
             st.code(traceback.format_exc())
             gc.collect()  # Cleanup even on error
-    
+
     # Final compatibility guard: ensure 'product_description' exists even if cached data is old
     if 'product_description' not in df.columns:
         import re
@@ -768,19 +822,7 @@ if df is not None and accurate_kpis is not None:
             df['product_description'] = df[src].astype(str)
         else:
             df['product_description'] = 'All Products'
-    # Clean presentation - no status messages
-    
-    # Sidebar controls
-    st.sidebar.header("Dashboard Controls")
-    
-    # Cache clear button
-    if st.sidebar.button("Clear Cache & Reload Data", help="Clear cached data and force fresh data reload"):
-        st.cache_data.clear()
-        gc.collect()
-        gc.collect()  # Double cleanup
-        st.success("Cache cleared! Refreshing...")
-        st.rerun()
-    
+
     # Memory monitoring display (Phase 1)
     st.sidebar.markdown("---")
     mem_current = get_memory_usage()
@@ -790,91 +832,8 @@ if df is not None and accurate_kpis is not None:
             st.sidebar.error("⚠️ High memory usage!")
         elif mem_current > 500:
             st.sidebar.warning("⚠️ Moderate memory usage")
-    
+
     st.sidebar.markdown("---")
-    
-    # Date range filter
-    st.sidebar.subheader("Date Range")
-    # Ensure date column exists (created during loading but verify)
-    if 'date' not in df.columns and 'year' in df.columns and 'month_number' in df.columns:
-        df['date'] = pd.to_datetime(df['year'].astype(str) + '-' + df['month_number'].astype(str).str.zfill(2) + '-01')
-    
-    if 'date' in df.columns:
-        min_date = df['date'].min().date()
-        max_date = df['date'].max().date()
-    else:
-        # Fallback: use year and month_number
-        min_date = datetime(int(df['year'].min()), int(df['month_number'].min()), 1).date()
-        max_date = datetime(int(df['year'].max()), int(df['month_number'].max()), 28).date()
-    
-    date_range = st.sidebar.date_input(
-        "Select Date Range",
-        value=(min_date, max_date),
-        min_value=min_date
-    )
-    
-    # Get filter options BEFORE filtering (to avoid loading full unique lists)
-    # CRITICAL: Use sampling to get filter options without loading full unique lists
-    # Country filter
-    st.sidebar.subheader("Country Filter")
-    # Sample countries for dropdown (faster than loading all) - use sampling
-    if len(df) > 50000:
-        # For large datasets, sample to get unique countries
-        sample_df = df.sample(min(50000, len(df)))
-        sample_countries = sample_df['country_of_destination'].drop_duplicates().head(100).tolist()
-        del sample_df
-        gc.collect()
-    else:
-        sample_countries = df['country_of_destination'].drop_duplicates().head(100).tolist()
-    all_countries = ['All Countries'] + sorted(sample_countries)
-    selected_countries = st.sidebar.multiselect(
-        "Select Countries",
-        options=all_countries,
-        default=['All Countries']
-    )
-    
-    # Product filter
-    st.sidebar.subheader("Product Filter")
-    # Sample products for dropdown (faster than loading all) - use sampling
-    if len(df) > 50000:
-        # For large datasets, sample to get unique products
-        sample_df = df.sample(min(50000, len(df)))
-        sample_products = sample_df['product_description'].drop_duplicates().head(100).tolist()
-        del sample_df
-        gc.collect()
-    else:
-        sample_products = df['product_description'].drop_duplicates().head(100).tolist()
-    all_products = ['All Products'] + sorted(sample_products)
-    selected_products = st.sidebar.multiselect(
-        "Select Products",
-        options=all_products,
-        default=['All Products']
-    )
-    
-    # Filter data based on date range
-    if len(date_range) == 2:
-        start_date, end_date = date_range
-        original_df_size = len(df)
-        df = df[(df['date'].dt.date >= start_date) & (df['date'].dt.date <= end_date)].copy()
-    else:
-        original_df_size = len(df)
-        df = df.copy()
-    
-    # Apply country filter
-    if 'All Countries' not in selected_countries and selected_countries:
-        df = df[df['country_of_destination'].isin(selected_countries)].copy()
-    
-    # Apply product filter
-    if 'All Products' not in selected_products and selected_products:
-        df = df[df['product_description'].isin(selected_products)].copy()
-    
-    # Report filter effect (without deleting df)
-    filtered_df_size = len(df)
-    if original_df_size > 0:
-        st.sidebar.info(f"Filtered: {original_df_size:,} → {filtered_df_size:,} rows ({100*filtered_df_size/original_df_size:.1f}%)")
-    gc.collect()
-    
-    # Main dashboard content
     
     # 1. DATASET SUMMARY (from your notebook Cell 4)
     st.markdown('<h2 class="section-header">Dataset Summary</h2>', unsafe_allow_html=True)
