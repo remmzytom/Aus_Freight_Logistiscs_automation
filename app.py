@@ -380,28 +380,6 @@ def ensure_data_file() -> str:
         if col in df.columns:
             df[col] = df[col].replace('nan', 'Unknown').replace('NaN', 'Unknown').fillna('Unknown')
     
-    # Fix country code issues (match notebook) - this affects unique country count
-    try:
-        from country_mapping import map_country_code_to_name
-        # Fix "Country Code XXX" entries
-        if 'country_of_destination' in df.columns:
-            country_code_mask = df['country_of_destination'].astype(str).str.contains('Country Code', na=False)
-            if country_code_mask.any():
-                # Extract the country code (remove "Country Code " prefix)
-                df.loc[country_code_mask, 'country_of_destination'] = df.loc[country_code_mask, 'country_of_destination'].str.replace('Country Code ', '')
-                # Apply proper mapping
-                df.loc[country_code_mask, 'country_of_destination'] = df.loc[country_code_mask, 'country_of_destination'].apply(map_country_code_to_name)
-            
-            # Also fix country codes from country_of_destination_code column if it exists
-            if 'country_of_destination_code' in df.columns:
-                from country_mapping import is_problematic_country_name
-                problematic_mask = df['country_of_destination'].apply(is_problematic_country_name)
-                if problematic_mask.any():
-                    df.loc[problematic_mask, 'country_of_destination'] = df.loc[problematic_mask, 'country_of_destination_code'].apply(map_country_code_to_name)
-    except ImportError:
-        # If country_mapping not available, skip this step
-        pass
-    
     # Clean product descriptions (match notebook)
     if 'product_description' in df.columns:
         df['product_description'] = df['product_description'].astype(str).str.strip()
@@ -410,7 +388,47 @@ def ensure_data_file() -> str:
         df['product_description'] = df['product_description'].str.replace('"', '', regex=False)
         df['product_description'] = df['product_description'].str.replace("'", '', regex=False)
     
-    # Apply SITC code mapping to unclassified products (match notebook) - affects unique product count
+    # Create derived features (match notebook - must happen before duplicate removal)
+    import numpy as np
+    from datetime import datetime
+    
+    # Extract year and month_number (match notebook)
+    if 'month' in df.columns:
+        # Extract year (4 digits at the end)
+        if 'year' not in df.columns:
+            df['year'] = df['month'].astype(str).str.extract(r'(\d{4})')[0]
+            df['year'] = pd.to_numeric(df['year'], errors='coerce')
+        
+        # Extract month name and convert to month_number (match notebook)
+        if 'month_number' not in df.columns:
+            month_map = {
+                'January': 1, 'February': 2, 'March': 3, 'April': 4,
+                'May': 5, 'June': 6, 'July': 7, 'August': 8,
+                'September': 9, 'October': 10, 'November': 11, 'December': 12
+            }
+            # Extract month name (everything before the year) - match notebook format
+            month_name_temp = df['month'].astype(str).str.extract(r'^([A-Za-z]+)')[0]
+            df['month_number'] = month_name_temp.map(month_map)
+            
+            # Update month column to just month name (match notebook behavior)
+            # But keep original format for compatibility, just store month name in a temp column
+            # We'll use month_number for calculations
+    
+    # Create value_per_tonne metric (match notebook)
+    if 'value_fob_aud' in df.columns and 'gross_weight_tonnes' in df.columns:
+        df['value_per_tonne'] = df['value_fob_aud'] / df['gross_weight_tonnes'].replace(0, np.nan)
+    
+    # Add data processing date (match notebook)
+    df['data_processed_date'] = datetime.now().strftime('%Y-%m-%d')
+    
+    # Remove duplicates (match notebook - happens after derived features but before mappings)
+    initial_count = len(df)
+    df = df.drop_duplicates()
+    duplicates_removed = initial_count - len(df)
+    if duplicates_removed > 0:
+        st.info(f"Removed {duplicates_removed:,} duplicate rows")
+    
+    # Apply SITC code mapping to unclassified products (match notebook - after duplicates)
     try:
         from sitc_mapping import map_sitc_to_product, get_unclassified_patterns
         if 'product_description' in df.columns and 'prod_descpt_code' in df.columns:
@@ -422,32 +440,35 @@ def ensure_data_file() -> str:
         # If sitc_mapping not available, skip this step
         pass
     
+    # Apply country code mapping for problematic countries (match notebook - after SITC mapping)
+    try:
+        from country_mapping import is_problematic_country_name, map_country_code_to_name
+        if 'country_of_destination' in df.columns and 'country_of_destination_code' in df.columns:
+            # Map problematic country names using country_of_destination_code (match notebook)
+            problematic_mask = df['country_of_destination'].apply(is_problematic_country_name)
+            if problematic_mask.any():
+                df.loc[problematic_mask, 'country_of_destination'] = df.loc[problematic_mask, 'country_of_destination_code'].apply(map_country_code_to_name)
+    except ImportError:
+        # If country_mapping not available, skip this step
+        pass
+    
+    # Fix "Country Code XXX" entries (match notebook - happens AFTER problematic country mapping)
+    try:
+        from country_mapping import map_country_code_to_name
+        if 'country_of_destination' in df.columns:
+            country_code_mask = df['country_of_destination'].astype(str).str.contains('Country Code', na=False)
+            if country_code_mask.any():
+                # Extract the country code (remove "Country Code " prefix)
+                df.loc[country_code_mask, 'country_of_destination'] = df.loc[country_code_mask, 'country_of_destination'].str.replace('Country Code ', '')
+                # Apply proper mapping
+                df.loc[country_code_mask, 'country_of_destination'] = df.loc[country_code_mask, 'country_of_destination'].apply(map_country_code_to_name)
+    except ImportError:
+        # If country_mapping not available, skip this step
+        pass
+    
     # Final normalization: strip whitespace from country names (affects unique count)
     if 'country_of_destination' in df.columns:
         df['country_of_destination'] = df['country_of_destination'].astype(str).str.strip()
-    
-    # Extract year if missing
-    if 'month' in df.columns and 'year' not in df.columns:
-        df['year'] = df['month'].astype(str).str.extract(r'(\d{4})')
-    
-    # Create month_number column (required by dashboard)
-    if 'month' in df.columns and 'month_number' not in df.columns:
-        month_map = {
-            'January': 1, 'February': 2, 'March': 3, 'April': 4,
-            'May': 5, 'June': 6, 'July': 7, 'August': 8,
-            'September': 9, 'October': 10, 'November': 11, 'December': 12
-        }
-        # Extract month name from month column (format: "January 2024")
-        df['month_name'] = df['month'].astype(str).str.split().str[0]
-        df['month_number'] = df['month_name'].map(month_map).fillna(1)
-        df = df.drop(columns=['month_name'], errors='ignore')
-    
-    # Remove duplicates (match notebook)
-    initial_count = len(df)
-    df = df.drop_duplicates()
-    duplicates_removed = initial_count - len(df)
-    if duplicates_removed > 0:
-        st.info(f"Removed {duplicates_removed:,} duplicate rows")
 
     df.to_csv(cleaned_path, index=False)
     st.success("Data loaded and processed successfully!")
