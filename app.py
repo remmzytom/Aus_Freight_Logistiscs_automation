@@ -503,7 +503,7 @@ def load_exports_cleaned(path: str, columns: list = None, filters: dict = None) 
         filters: Dict of filters to apply at CSV level (e.g., {'year': [2024, 2025]})
     """
     # Load in chunks to avoid memory issues with large datasets
-    chunk_size = 100000  # 100k rows at a time
+    chunk_size = 50000  # Reduced to 50k rows at a time for lower memory footprint
     chunks = []
     df_combined = None
     
@@ -579,7 +579,7 @@ def load_exports_cleaned(path: str, columns: list = None, filters: dict = None) 
             
             chunks.append(chunk)
             # Combine chunks in batches to reduce memory spikes
-            if len(chunks) >= 5:  # Combine every 5 chunks (500k rows)
+            if len(chunks) >= 3:  # Reduced to 3 chunks (150k rows) to reduce memory spikes
                 if df_combined is None:
                     df_combined = pd.concat(chunks, ignore_index=True)
                 else:
@@ -653,6 +653,26 @@ def compute_kpis_chunked(file_path: str) -> dict:
 
 
 @st.cache_data(ttl=300, max_entries=2)  # Reduced TTL to 5 min, limit cache entries
+def get_filter_options(file_path: str) -> dict:
+    """Get filter options (dates, countries, products) without loading full dataset."""
+    try:
+        # Sample only 10k rows to get unique values
+        sample = pd.read_csv(file_path, nrows=10000, usecols=['date', 'country_of_destination', 'product_description', 'year', 'month'])
+        
+        # Convert date if needed
+        if 'date' in sample.columns:
+            sample['date'] = pd.to_datetime(sample['date'], errors='coerce')
+        
+        return {
+            'min_date': sample['date'].min().date() if 'date' in sample.columns else None,
+            'max_date': sample['date'].max().date() if 'date' in sample.columns else None,
+            'countries': sorted(sample['country_of_destination'].unique().tolist()) if 'country_of_destination' in sample.columns else [],
+            'products': sorted(sample['product_description'].unique().tolist())[:100] if 'product_description' in sample.columns else []  # Limit to 100
+        }
+    except Exception as e:
+        return None
+
+@st.cache_data(ttl=300, max_entries=2)  # Reduced TTL to 5 min, limit cache entries
 def load_data(columns: list = None, filters: dict = None):
     """Efficiently load dataset - use lazy loading with column selection and filtering."""
     try:
@@ -681,10 +701,14 @@ def load_data(columns: list = None, filters: dict = None):
         st.code(traceback.format_exc())
         return None, None
 
-# Load data with error handling
+# Load data with error handling - CRITICAL: Load only essential columns to reduce memory
 try:
     with st.spinner('Loading data... This may take a moment for the full dataset.'):
-        df, accurate_kpis = load_data()
+        # Define essential columns only - don't load unnecessary columns
+        essential_columns = ['date', 'year', 'month', 'month_number', 'value_fob_aud', 
+                            'gross_weight_tonnes', 'quantity', 'country_of_destination', 
+                            'product_description', 'prod_descpt_code', 'state_of_origin']
+        df, accurate_kpis = load_data(columns=essential_columns)  # Load only essential columns
 except Exception as e:
     st.error(f"Failed to load data: {str(e)}")
     st.stop()
@@ -763,36 +787,74 @@ if df is not None and accurate_kpis is not None:
         min_value=min_date
     )
     
-    # Filter data based on date range
-    if len(date_range) == 2:
-        start_date, end_date = date_range
-        df_filtered = df[(df['date'].dt.date >= start_date) & (df['date'].dt.date <= end_date)]
-    else:
-        df_filtered = df
-    
+    # Get filter options BEFORE filtering (to avoid loading full unique lists)
+    # CRITICAL: Use sampling to get filter options without loading full unique lists
     # Country filter
     st.sidebar.subheader("Country Filter")
-    all_countries = ['All Countries'] + sorted(df['country_of_destination'].unique().tolist())
+    # Sample countries for dropdown (faster than loading all) - use sampling
+    if len(df) > 50000:
+        # For large datasets, sample to get unique countries
+        sample_df = df.sample(min(50000, len(df)))
+        sample_countries = sample_df['country_of_destination'].drop_duplicates().head(100).tolist()
+        del sample_df
+        gc.collect()
+    else:
+        sample_countries = df['country_of_destination'].drop_duplicates().head(100).tolist()
+    all_countries = ['All Countries'] + sorted(sample_countries)
     selected_countries = st.sidebar.multiselect(
         "Select Countries",
         options=all_countries,
         default=['All Countries']
     )
     
-    if 'All Countries' not in selected_countries and selected_countries:
-        df_filtered = df_filtered[df_filtered['country_of_destination'].isin(selected_countries)]
-    
     # Product filter
     st.sidebar.subheader("Product Filter")
-    all_products = ['All Products'] + sorted(df['product_description'].unique().tolist())
+    # Sample products for dropdown (faster than loading all) - use sampling
+    if len(df) > 50000:
+        # For large datasets, sample to get unique products
+        sample_df = df.sample(min(50000, len(df)))
+        sample_products = sample_df['product_description'].drop_duplicates().head(100).tolist()
+        del sample_df
+        gc.collect()
+    else:
+        sample_products = df['product_description'].drop_duplicates().head(100).tolist()
+    all_products = ['All Products'] + sorted(sample_products)
     selected_products = st.sidebar.multiselect(
         "Select Products",
         options=all_products,
         default=['All Products']
     )
     
+    # Filter data based on date range
+    if len(date_range) == 2:
+        start_date, end_date = date_range
+        df = df[(df['date'].dt.date >= start_date) & (df['date'].dt.date <= end_date)].copy()
+    else:
+        df = df.copy()
+    
+    # Apply country filter
+    if 'All Countries' not in selected_countries and selected_countries:
+        df = df[df['country_of_destination'].isin(selected_countries)].copy()
+    
+    # Apply product filter
     if 'All Products' not in selected_products and selected_products:
-        df_filtered = df_filtered[df_filtered['product_description'].isin(selected_products)]
+        df = df[df['product_description'].isin(selected_products)].copy()
+    
+    # CRITICAL: Delete full df immediately after filtering to free memory
+    original_df_size = len(df)
+    filtered_df_size = len(df)
+    del df
+    gc.collect()
+    gc.collect()  # Double cleanup
+    
+    # Memory monitoring after filtering
+    mem_after_filter = get_memory_usage()
+    if mem_after_filter > 0:
+        st.sidebar.info(f"Filtered: {original_df_size:,} → {filtered_df_size:,} rows ({100*filtered_df_size/original_df_size:.1f}%)")
+    
+    # Rename df to df for consistency throughout codebase
+    df = df
+    del df
     
     # Main dashboard content
     
@@ -805,7 +867,7 @@ if df is not None and accurate_kpis is not None:
         st.markdown(f"""
         <div class="metric-card">
             <h3>Total Records</h3>
-            <h2>{len(df_filtered):,}</h2>
+            <h2>{len(df):,}</h2>
             <p>Individual Shipments</p>
         </div>
         """, unsafe_allow_html=True)
@@ -814,7 +876,7 @@ if df is not None and accurate_kpis is not None:
         st.markdown(f"""
         <div class="metric-card">
             <h3>Countries</h3>
-            <h2>{df_filtered['country_of_destination'].nunique()}</h2>
+            <h2>{df['country_of_destination'].nunique()}</h2>
             <p>Export Destinations</p>
         </div>
         """, unsafe_allow_html=True)
@@ -823,7 +885,7 @@ if df is not None and accurate_kpis is not None:
         st.markdown(f"""
         <div class="metric-card">
             <h3>Products</h3>
-            <h2>{df_filtered['product_description'].nunique()}</h2>
+            <h2>{df['product_description'].nunique()}</h2>
             <p>Product Types</p>
         </div>
         """, unsafe_allow_html=True)
@@ -832,7 +894,7 @@ if df is not None and accurate_kpis is not None:
         st.markdown(f"""
         <div class="metric-card">
             <h3>States</h3>
-            <h2>{df_filtered['state_of_origin'].nunique()}</h2>
+            <h2>{df['state_of_origin'].nunique()}</h2>
             <p>Export States</p>
         </div>
         """, unsafe_allow_html=True)
@@ -844,7 +906,7 @@ if df is not None and accurate_kpis is not None:
     
     with col1:
         # Calculate from filtered dataset to respect date range selection
-        total_value = df_filtered['value_fob_aud'].sum()
+        total_value = df['value_fob_aud'].sum()
         if total_value >= 1e9:
             value_display = f"${total_value/1e9:.1f}B"
         elif total_value >= 1e6:
@@ -863,7 +925,7 @@ if df is not None and accurate_kpis is not None:
     
     with col2:
         # Calculate from filtered dataset to respect date range selection
-        avg_shipment = df_filtered['value_fob_aud'].mean()
+        avg_shipment = df['value_fob_aud'].mean()
         if avg_shipment >= 1e6:
             avg_display = f"${avg_shipment/1e6:.1f}M"
         elif avg_shipment >= 1e3:
@@ -880,7 +942,7 @@ if df is not None and accurate_kpis is not None:
     
     with col3:
         # Calculate from filtered dataset to respect date range selection
-        median_shipment = df_filtered['value_fob_aud'].median()
+        median_shipment = df['value_fob_aud'].median()
         if median_shipment >= 1e6:
             median_display = f"${median_shipment/1e6:.1f}M"
         elif median_shipment >= 1e3:
@@ -897,7 +959,7 @@ if df is not None and accurate_kpis is not None:
     
     with col4:
         # Calculate from filtered dataset to respect date range selection
-        total_weight = df_filtered['gross_weight_tonnes'].sum()
+        total_weight = df['gross_weight_tonnes'].sum()
         if total_weight >= 1e9:
             weight_display = f"{total_weight/1e9:.1f}B"
         elif total_weight >= 1e6:
@@ -920,10 +982,10 @@ if df is not None and accurate_kpis is not None:
         
         # Check required columns exist
         required_cols = ['year', 'month_number', 'value_fob_aud', 'gross_weight_tonnes']
-        missing_cols = [col for col in required_cols if col not in df_filtered.columns]
+        missing_cols = [col for col in required_cols if col not in df.columns]
         if not missing_cols:
             # Ensure month_number and year are not NaN for grouping
-            df_ts = df_filtered[df_filtered['month_number'].notna() & df_filtered['year'].notna()].copy()
+            df_ts = df[df['month_number'].notna() & df['year'].notna()].copy()
             
             if len(df_ts) == 0:
                 st.warning("No valid date data available for time series analysis.")
@@ -955,9 +1017,7 @@ if df is not None and accurate_kpis is not None:
                     # Ensure all numeric columns are valid
                     monthly = monthly[monthly['value_fob_aud'].notna() & monthly['gross_weight_tonnes'].notna()]
                     
-                    if len(monthly) == 0:
-                        st.warning("No valid data after cleaning for time series analysis.")
-                    else:
+                    if len(monthly) > 0:
                         # Chart 1: Export Value Over Time (Interactive)
                         st.subheader("Monthly Export Value Trend")
                         
@@ -995,6 +1055,8 @@ if df is not None and accurate_kpis is not None:
                         )
                         fig1.update_xaxes(tickangle=45)
                         st.plotly_chart(fig1)
+                        del fig1  # Cleanup after chart
+                        gc.collect()
 
                         # Chart 2: Export Weight Over Time (Interactive)
                         st.subheader("Monthly Export Weight Trend")
@@ -1034,6 +1096,8 @@ if df is not None and accurate_kpis is not None:
                         )
                         fig2.update_xaxes(tickangle=45)
                         st.plotly_chart(fig2)
+                        del fig2  # Cleanup after chart
+                        gc.collect()
 
                         # Chart 3: Value per Tonne Over Time (Interactive) - KEY METRIC FOR LOGISTICS!
                         st.subheader("Average Value per Tonne Trend")
@@ -1071,10 +1135,17 @@ if df is not None and accurate_kpis is not None:
                         )
                         fig3.update_xaxes(tickangle=45)
                         st.plotly_chart(fig3)
+                        del fig3, monthly  # Cleanup after charts
+                        gc.collect()
+                    else:
+                        st.warning("No valid data after cleaning for time series analysis.")
                 else:
-                    st.warning("No data available for the selected date range. Please adjust your date filter.")
-        else:
-            st.warning(f"Missing required columns for time series analysis: {missing_cols}")
+                    st.warning(f"Missing required columns for time series analysis: {missing_cols}")
+            
+            # Cleanup temporary dataframe
+            if 'df_ts' in locals():
+                del df_ts
+                gc.collect()
     except Exception as e:
         st.error(f"Error in Time Series Analysis: {str(e)}")
         import traceback
@@ -1089,7 +1160,7 @@ if df is not None and accurate_kpis is not None:
     st.markdown('<h2 class="section-header">Country Analysis</h2>', unsafe_allow_html=True)
     
     # Top export destinations (exact code from your notebook)
-    top_countries = df_filtered.groupby('country_of_destination').agg({
+    top_countries = df.groupby('country_of_destination').agg({
         'value_fob_aud': 'sum',
         'gross_weight_tonnes': 'sum'
     }).sort_values('value_fob_aud', ascending=False)
@@ -1138,12 +1209,14 @@ if df is not None and accurate_kpis is not None:
     )
     
     st.plotly_chart(fig)
+    del fig  # Cleanup after chart
+    gc.collect()
     
     # 4. PRODUCT ANALYSIS (from your notebook Cell 11)
     st.markdown('<h2 class="section-header">Product Analysis</h2>', unsafe_allow_html=True)
     
     # Top 20 products by value (exact code from your notebook)
-    top_products = df_filtered.groupby('product_description').agg({
+    top_products = df.groupby('product_description').agg({
         'value_fob_aud': 'sum',
         'gross_weight_tonnes': 'sum'
     }).sort_values('value_fob_aud', ascending=False)
@@ -1211,7 +1284,7 @@ if df is not None and accurate_kpis is not None:
     # Use the main dataset for accurate industry analysis (same as other sections)
     
     # Use the filtered dataset to respect date range selection
-    df_full_industry = df_filtered.copy()
+    df_full_industry = df.copy()
     
     # SITC Code-based Product Categorization - Clean presentation
 
@@ -1265,9 +1338,10 @@ if df is not None and accurate_kpis is not None:
         'value_per_tonne': 'mean'
     }).round(2)
     
-    # Cleanup intermediate dataframe (Phase 1)
+    # Cleanup intermediate dataframe (Phase 1) - CRITICAL for memory
     del df_full_industry
     gc.collect()
+    gc.collect()  # Double cleanup
     
     # Flatten column names
     industry_analysis.columns = ['Total_Value', 'Shipment_Count', 'Avg_Value', 'Total_Weight', 'Avg_Value_per_Tonne']
@@ -1458,7 +1532,7 @@ if df is not None and accurate_kpis is not None:
     st.markdown('<h2 class="section-header">Product-Market Analysis</h2>', unsafe_allow_html=True)
     
     # Use filtered dataset for Product-Market Analysis to respect date range selection
-    df_full_product_market = df_filtered.copy()
+    df_full_product_market = df.copy()
     
     # Add calculated fields to match your notebook
     df_full_product_market['date'] = pd.to_datetime(df_full_product_market['year'].astype(str) + '-' + df_full_product_market['month_number'].astype(str).str.zfill(2) + '-01')
@@ -1519,6 +1593,8 @@ if df is not None and accurate_kpis is not None:
     fig1.update_yaxes(autorange="reversed")
     fig1.update_xaxes(tickformat='$,.0f')
     st.plotly_chart(fig1)
+    del fig1  # Cleanup after chart
+    gc.collect()
     
     # 2. TOP DESTINATION COUNTRIES (Interactive)
     st.subheader("Top 10 Destination Countries")
@@ -1546,6 +1622,8 @@ if df is not None and accurate_kpis is not None:
     fig2.update_yaxes(autorange="reversed")
     fig2.update_xaxes(tickformat='$,.0f')
     st.plotly_chart(fig2)
+    del fig2  # Cleanup after chart
+    gc.collect()
     
     # 3. PRODUCT DIVERSIFICATION BY COUNTRY (Interactive)
     st.subheader("Product Diversification by Country")
@@ -1596,6 +1674,9 @@ if df is not None and accurate_kpis is not None:
     )
     fig4.update_traces(textposition='inside', textinfo='percent+label')
     st.plotly_chart(fig4)
+    del fig4, fig3, top_products, top_countries, df_full_product_market  # Cleanup after section
+    gc.collect()
+    gc.collect()
     
     # Clean dashboard - no unnecessary text
     
@@ -1603,7 +1684,7 @@ if df is not None and accurate_kpis is not None:
     st.markdown('<h2 class="section-header">Top 15 Ports by Tonnage</h2>', unsafe_allow_html=True)
     
     # Use filtered dataset for Port Analysis to respect date range selection
-    df_full_ports = df_filtered.copy()
+    df_full_ports = df.copy()
     
     # Add calculated fields to match your notebook
     df_full_ports['date'] = pd.to_datetime(df_full_ports['year'].astype(str) + '-' + df_full_ports['month_number'].astype(str).str.zfill(2) + '-01')
@@ -1679,7 +1760,7 @@ if df is not None and accurate_kpis is not None:
     st.write("**=== VOLUME VS. VALUE ANALYSIS BY PRODUCT (INDUSTRY-IDENTIFIED) ===**")
     
     # Use filtered dataset for Volume vs Value Analysis to respect date range selection
-    df_full_volume_value = df_filtered.copy()
+    df_full_volume_value = df.copy()
     
     # Add calculated fields to match your notebook
     df_full_volume_value['date'] = pd.to_datetime(df_full_volume_value['year'].astype(str) + '-' + df_full_volume_value['month_number'].astype(str).str.zfill(2) + '-01')
@@ -1857,7 +1938,7 @@ if df is not None and accurate_kpis is not None:
     st.markdown('<h2 class="section-header">State & Transport Analysis</h2>', unsafe_allow_html=True)
     
     # State Analysis (from your notebook Cell 13)
-    states = df_filtered.groupby('state_of_origin')['value_fob_aud'].sum().sort_values(ascending=False)
+    states = df.groupby('state_of_origin')['value_fob_aud'].sum().sort_values(ascending=False)
     states_pct = (states / states.sum() * 100).round(1)
     
     st.subheader("Export Value by State")
@@ -1912,7 +1993,7 @@ if df is not None and accurate_kpis is not None:
     # Transport Mode Analysis (from your notebook Cell 15)
     st.subheader("Export Value by Transport Mode")
     
-    transport = df_filtered.groupby('mode_of_transport')['value_fob_aud'].sum().sort_values(ascending=False)
+    transport = df.groupby('mode_of_transport')['value_fob_aud'].sum().sort_values(ascending=False)
     transport_pct = (transport / transport.sum() * 100)
     
     # Clean dashboard - no unnecessary text
@@ -1970,7 +2051,7 @@ if df is not None and accurate_kpis is not None:
     st.subheader("Product Categories Analysis")
     
     # Calculate value per tonne for products
-    product_analysis = df_filtered.groupby('product_description').agg({
+    product_analysis = df.groupby('product_description').agg({
         'value_fob_aud': 'sum',
         'gross_weight_tonnes': 'sum'
     }).reset_index()
@@ -1986,7 +2067,7 @@ if df is not None and accurate_kpis is not None:
     # Top 15 ports by tonnage
     st.subheader("Top 15 Ports by Tonnage")
     
-    port_tonnage = df_filtered.groupby('port_of_loading')['gross_weight_tonnes'].sum().sort_values(ascending=False).head(15)
+    port_tonnage = df.groupby('port_of_loading')['gross_weight_tonnes'].sum().sort_values(ascending=False).head(15)
     
     # Create interactive lollipop chart
     port_tonnage_df = port_tonnage.reset_index()
@@ -2020,7 +2101,7 @@ if df is not None and accurate_kpis is not None:
     st.subheader("Port Efficiency Analysis")
     
     # Use filtered dataset for accurate port analysis to respect date range selection
-    port_efficiency = df_filtered.groupby('port_of_loading').agg({
+    port_efficiency = df.groupby('port_of_loading').agg({
         'value_fob_aud': 'sum',
         'country_of_destination': 'count'
     }).reset_index()
@@ -2107,7 +2188,7 @@ if df is not None and accurate_kpis is not None:
     st.markdown('<h2 class="section-header">Regional Analysis</h2>', unsafe_allow_html=True)
     
     # Use filtered dataset for accurate regional analysis to respect date range selection
-    df_full = df_filtered.copy()
+    df_full = df.copy()
     
     # Add calculated fields to match your notebook
     df_full['date'] = pd.to_datetime(df_full['year'].astype(str) + '-' + df_full['month_number'].astype(str).str.zfill(2) + '-01')
@@ -2223,19 +2304,19 @@ if df is not None and accurate_kpis is not None:
         
         # Filter for Q1 months (January, February, March, April)
         # Handle different month column formats
-        if 'month' in df_filtered.columns:
+        if 'month' in df.columns:
             # If month column contains full date strings like "January 2024", extract just the month name
-            if df_filtered['month'].dtype == 'object':
-                month_names = df_filtered['month'].astype(str).str.split().str[0]
+            if df['month'].dtype == 'object':
+                month_names = df['month'].astype(str).str.split().str[0]
                 q1_months = ['January', 'February', 'March', 'April']
-                df_q1 = df_filtered[month_names.isin(q1_months)].copy()
+                df_q1 = df[month_names.isin(q1_months)].copy()
             else:
                 # If month is already just month names
                 q1_months = ['January', 'February', 'March', 'April']
-                df_q1 = df_filtered[df_filtered['month'].isin(q1_months)].copy()
-        elif 'month_number' in df_filtered.columns:
+                df_q1 = df[df['month'].isin(q1_months)].copy()
+        elif 'month_number' in df.columns:
             # If only month_number exists, filter for Q1 (months 1-4)
-            df_q1 = df_filtered[df_filtered['month_number'].isin([1, 2, 3, 4])].copy()
+            df_q1 = df[df['month_number'].isin([1, 2, 3, 4])].copy()
         else:
             df_q1 = pd.DataFrame()
             st.warning("Month information not available for Q1 filtering.")
@@ -2320,8 +2401,15 @@ if df is not None and accurate_kpis is not None:
                         hovertemplate='<b>%{y}</b><br>YoY Growth: %{x:.1f}%<extra></extra>'
                     )
                     st.plotly_chart(fig2)
+                    del fig2, top_declining  # Cleanup after charts
+                    gc.collect()
                 else:
                     st.warning("No countries meet the significant trade volume threshold ($100M in Q1 2024) for growth analysis.")
+                
+                # Cleanup Q1 dataframes
+                if 'df_q1' in locals():
+                    del df_q1, country_yearly, significant_countries, top_growing
+                    gc.collect()
             else:
                 st.warning("Data for both 2024 and 2025 Q1 periods is required for YoY growth analysis. Current data may only cover one year.")
         else:
