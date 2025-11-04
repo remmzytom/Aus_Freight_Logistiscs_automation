@@ -2104,89 +2104,120 @@ if df is not None and accurate_kpis is not None:
     # Clean dashboard - no unnecessary text
     
     # 9. GROWING & DECLINING MARKETS ANALYSIS (EXACT from your notebook)
-    st.markdown('<h2 class="section-header">Growing & Declining Markets Analysis</h2>', unsafe_allow_html=True)
-    
-    # Clean presentation - show only visualizations
-    
-    # Filter for Q1 months (January, February, March, April)
-    q1_months = ['January', 'February', 'March', 'April']
-    df_q1 = df_filtered[df_filtered['month'].isin(q1_months)].copy()
-    
-    # Calculate export values by country and year for Q1 only
-    country_yearly = df_q1.groupby(['country_of_destination', 'year'])['value_fob_aud'].sum().unstack(fill_value=0)
-    
-    # Calculate YoY growth
-    if 2024 in country_yearly.columns and 2025 in country_yearly.columns:
-        country_yearly['YoY_Growth_%'] = ((country_yearly[2025] - country_yearly[2024]) / country_yearly[2024] * 100).round(2)
-        country_yearly['YoY_Growth_Absolute'] = (country_yearly[2025] - country_yearly[2024]) / 1e9  # in billions
-        country_yearly['Q1_2024_Value'] = country_yearly[2024] / 1e9  # in billions
-        country_yearly['Q1_2025_Value'] = country_yearly[2025] / 1e9  # in billions
-        
-        # Filter countries with significant trade volume (at least $100M in Q1 2024)
-        significant_countries = country_yearly[country_yearly[2024] >= 1e8].copy()  # $100M threshold
-        
-        # Sort by YoY growth
-        significant_countries = significant_countries.sort_values('YoY_Growth_%', ascending=False)
+    try:
+        st.markdown('<h2 class="section-header">Growing & Declining Markets Analysis</h2>', unsafe_allow_html=True)
         
         # Clean presentation - show only visualizations
         
-        # 6.1 Top 15 Growing Markets (Interactive)
-        top_growing = significant_countries.head(15).reset_index()
-        fig1 = px.bar(top_growing, x='YoY_Growth_%', y='country_of_destination',
-                      orientation='h',
-                      title='Top 15 Growing Markets (Q1 2024 → Q1 2025)',
-                      labels={'YoY_Growth_%': 'YoY Growth (%)', 'country_of_destination': 'Country'},
-                      color='YoY_Growth_%',
-                      color_continuous_scale='viridis',
-                      text=[f"{value:.1f}%" for value in top_growing['YoY_Growth_%']])
-        fig1.update_layout(
-            title_font_size=16,
-            title_font_color='#2c3e50',
-            xaxis_title_font_size=14,
-            yaxis_title_font_size=14,
-            template='plotly_white',
-            height=600
-        )
-        fig1.update_yaxes(autorange="reversed")
-        fig1.add_vline(x=0, line_dash="dash", line_color="black", opacity=0.3)
-        fig1.update_traces(
-            textposition='outside',
-            textfont=dict(size=10, color='#2c3e50'),
-            hovertemplate='<b>%{y}</b><br>YoY Growth: %{x:.1f}%<extra></extra>'
-        )
-        st.plotly_chart(fig1)
+        # Filter for Q1 months (January, February, March, April)
+        # Handle different month column formats
+        if 'month' in df_filtered.columns:
+            # If month column contains full date strings like "January 2024", extract just the month name
+            if df_filtered['month'].dtype == 'object':
+                month_names = df_filtered['month'].astype(str).str.split().str[0]
+                q1_months = ['January', 'February', 'March', 'April']
+                df_q1 = df_filtered[month_names.isin(q1_months)].copy()
+            else:
+                # If month is already just month names
+                q1_months = ['January', 'February', 'March', 'April']
+                df_q1 = df_filtered[df_filtered['month'].isin(q1_months)].copy()
+        elif 'month_number' in df_filtered.columns:
+            # If only month_number exists, filter for Q1 (months 1-4)
+            df_q1 = df_filtered[df_filtered['month_number'].isin([1, 2, 3, 4])].copy()
+        else:
+            df_q1 = pd.DataFrame()
+            st.warning("Month information not available for Q1 filtering.")
         
-        # 6.2 Top 15 Declining Markets (Interactive)
-        top_declining = significant_countries.tail(15).reset_index()
-        fig2 = px.bar(top_declining, x='YoY_Growth_%', y='country_of_destination',
-                      orientation='h',
-                      title='Top 15 Declining Markets (Q1 2024 → Q1 2025)',
-                      labels={'YoY_Growth_%': 'YoY Growth (%)', 'country_of_destination': 'Country'},
-                      color='YoY_Growth_%',
-                      color_continuous_scale='plasma',
-                      text=[f"{value:.1f}%" for value in top_declining['YoY_Growth_%']])
-        fig2.update_layout(
-            title_font_size=16,
-            title_font_color='#2c3e50',
-            xaxis_title_font_size=14,
-            yaxis_title_font_size=14,
-            template='plotly_white',
-            height=600
-        )
-        fig2.update_yaxes(autorange="reversed")
-        fig2.add_vline(x=0, line_dash="dash", line_color="black", opacity=0.3)
-        fig2.update_traces(
-            textposition='outside',
-            textfont=dict(size=10, color='#2c3e50'),
-            hovertemplate='<b>%{y}</b><br>YoY Growth: %{x:.1f}%<extra></extra>'
-        )
-        st.plotly_chart(fig2)
-        
-        # Clean dashboard - no unnecessary text
-        
-    else:
-        # Clean dashboard - no unnecessary text
-        pass
+        if len(df_q1) > 0 and 'year' in df_q1.columns and 'country_of_destination' in df_q1.columns:
+            # Ensure year is numeric for proper grouping
+            df_q1['year'] = pd.to_numeric(df_q1['year'], errors='coerce')
+            
+            # Calculate export values by country and year for Q1 only
+            country_yearly = df_q1.groupby(['country_of_destination', 'year'])['value_fob_aud'].sum().unstack(fill_value=0)
+            
+            # Convert year columns to numeric if they're strings
+            country_yearly.columns = pd.to_numeric(country_yearly.columns, errors='coerce')
+            
+            # Calculate YoY growth
+            if 2024 in country_yearly.columns and 2025 in country_yearly.columns:
+                # Handle division by zero
+                country_yearly = country_yearly[country_yearly[2024] > 0].copy()  # Remove countries with zero 2024 value
+                
+                country_yearly['YoY_Growth_%'] = ((country_yearly[2025] - country_yearly[2024]) / country_yearly[2024] * 100).round(2)
+                country_yearly['YoY_Growth_Absolute'] = (country_yearly[2025] - country_yearly[2024]) / 1e9  # in billions
+                country_yearly['Q1_2024_Value'] = country_yearly[2024] / 1e9  # in billions
+                country_yearly['Q1_2025_Value'] = country_yearly[2025] / 1e9  # in billions
+                
+                # Filter countries with significant trade volume (at least $100M in Q1 2024)
+                significant_countries = country_yearly[country_yearly[2024] >= 1e8].copy()  # $100M threshold
+                
+                if len(significant_countries) > 0:
+                    # Sort by YoY growth
+                    significant_countries = significant_countries.sort_values('YoY_Growth_%', ascending=False)
+                    
+                    # Clean presentation - show only visualizations
+                    
+                    # 6.1 Top 15 Growing Markets (Interactive)
+                    top_growing = significant_countries.head(15).reset_index()
+                    fig1 = px.bar(top_growing, x='YoY_Growth_%', y='country_of_destination',
+                                  orientation='h',
+                                  title='Top 15 Growing Markets (Q1 2024 → Q1 2025)',
+                                  labels={'YoY_Growth_%': 'YoY Growth (%)', 'country_of_destination': 'Country'},
+                                  color='YoY_Growth_%',
+                                  color_continuous_scale='viridis',
+                                  text=[f"{value:.1f}%" for value in top_growing['YoY_Growth_%']])
+                    fig1.update_layout(
+                        title_font_size=16,
+                        title_font_color='#2c3e50',
+                        xaxis_title_font_size=14,
+                        yaxis_title_font_size=14,
+                        template='plotly_white',
+                        height=600
+                    )
+                    fig1.update_yaxes(autorange="reversed")
+                    fig1.add_vline(x=0, line_dash="dash", line_color="black", opacity=0.3)
+                    fig1.update_traces(
+                        textposition='outside',
+                        textfont=dict(size=10, color='#2c3e50'),
+                        hovertemplate='<b>%{y}</b><br>YoY Growth: %{x:.1f}%<extra></extra>'
+                    )
+                    st.plotly_chart(fig1)
+                    
+                    # 6.2 Top 15 Declining Markets (Interactive)
+                    top_declining = significant_countries.tail(15).reset_index()
+                    fig2 = px.bar(top_declining, x='YoY_Growth_%', y='country_of_destination',
+                                  orientation='h',
+                                  title='Top 15 Declining Markets (Q1 2024 → Q1 2025)',
+                                  labels={'YoY_Growth_%': 'YoY Growth (%)', 'country_of_destination': 'Country'},
+                                  color='YoY_Growth_%',
+                                  color_continuous_scale='plasma',
+                                  text=[f"{value:.1f}%" for value in top_declining['YoY_Growth_%']])
+                    fig2.update_layout(
+                        title_font_size=16,
+                        title_font_color='#2c3e50',
+                        xaxis_title_font_size=14,
+                        yaxis_title_font_size=14,
+                        template='plotly_white',
+                        height=600
+                    )
+                    fig2.update_yaxes(autorange="reversed")
+                    fig2.add_vline(x=0, line_dash="dash", line_color="black", opacity=0.3)
+                    fig2.update_traces(
+                        textposition='outside',
+                        textfont=dict(size=10, color='#2c3e50'),
+                        hovertemplate='<b>%{y}</b><br>YoY Growth: %{x:.1f}%<extra></extra>'
+                    )
+                    st.plotly_chart(fig2)
+                else:
+                    st.warning("No countries meet the significant trade volume threshold ($100M in Q1 2024) for growth analysis.")
+            else:
+                st.warning("Data for both 2024 and 2025 Q1 periods is required for YoY growth analysis. Current data may only cover one year.")
+        else:
+            st.warning("Insufficient data available for Q1 analysis. Please check your date range filters.")
+    except Exception as e:
+        st.error(f"Error in Growing & Declining Markets Analysis: {str(e)}")
+        import traceback
+        st.code(traceback.format_exc())
     
     # 10. EXECUTIVE SUMMARY (from your notebook Cell 22)
     st.markdown('<h2 class="section-header">Executive Summary</h2>', unsafe_allow_html=True)
