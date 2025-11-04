@@ -369,11 +369,16 @@ def ensure_data_file() -> str:
             # Convert negative values to 0 (match notebook)
             df[col] = df[col].clip(lower=0)
     
-    # Fill missing text values (match notebook)
+    # Convert text columns to string type first (match notebook)
     text_columns = ['country_of_destination', 'product_description']
     for col in text_columns:
         if col in df.columns:
-            df[col] = df[col].fillna('Unknown')
+            df[col] = df[col].astype(str)
+    
+    # Fill missing text values (match notebook)
+    for col in text_columns:
+        if col in df.columns:
+            df[col] = df[col].replace('nan', 'Unknown').replace('NaN', 'Unknown').fillna('Unknown')
     
     # Fix country code issues (match notebook) - this affects unique country count
     try:
@@ -416,6 +421,10 @@ def ensure_data_file() -> str:
     except ImportError:
         # If sitc_mapping not available, skip this step
         pass
+    
+    # Final normalization: strip whitespace from country names (affects unique count)
+    if 'country_of_destination' in df.columns:
+        df['country_of_destination'] = df['country_of_destination'].astype(str).str.strip()
     
     # Extract year if missing
     if 'month' in df.columns and 'year' not in df.columns:
