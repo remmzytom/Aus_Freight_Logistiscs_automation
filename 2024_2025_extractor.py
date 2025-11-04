@@ -54,7 +54,7 @@ def extract_2024_2025():
                     if len(chunk_2024_2025) > 0:
                         filtered_chunks.append(chunk_2024_2025)
                         logger.info(f"Found {len(chunk_2024_2025)} records in chunk (processed {total_processed:,} total)")
-                    
+        
                     # Clean up memory aggressively
                     del chunk, chunk_2024_2025
                     import gc

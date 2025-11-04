@@ -766,3 +766,39 @@ print(f"Total Weight: {df['gross_weight_tonnes'].sum():,.2f} tonnes")
 2025-10-31 11:27:45,064 - INFO - Duration: 0:07:56.975583
 2025-10-31 11:27:49,964 - INFO - Email sent successfully: Freight Logistics Automation - SUCCESS
 2025-10-31 11:27:49,964 - INFO - Success notification sent
+2025-11-01 01:01:57,264 - INFO - Simple Freight Logistics Automation Started
+2025-11-01 01:01:57,264 - INFO - Project Directory: C:\Cursor AI_projects\Aus_Freight_Logistic
+2025-11-01 01:01:57,264 - INFO - Starting Freight Logistics Automation
+2025-11-01 01:01:57,264 - INFO - Started at: 2025-11-01 01:01:57
+2025-11-01 01:01:57,264 - INFO - Force fresh data download - running extractor...
+2025-11-01 01:01:57,264 - INFO - Collecting fresh data from ABS website...
+2025-11-01 01:02:54,278 - INFO - Data collection completed successfully
+2025-11-01 01:02:54,278 - INFO - Running data cleaning...
+2025-11-01 01:04:37,814 - INFO - Data cleaning completed successfully
+2025-11-01 01:04:37,814 - INFO - Running data analysis...
+2025-11-01 01:06:47,706 - INFO - Data analysis completed successfully
+2025-11-01 01:06:47,706 - INFO - Updating dashboard...
+2025-11-01 01:06:47,706 - INFO - Dashboard updated successfully
+2025-11-01 01:06:47,706 - INFO - Dashboard available at: http://localhost:8501
+2025-11-01 01:06:47,706 - INFO - Automation completed successfully!
+2025-11-01 01:06:47,706 - INFO - Duration: 0:04:50.442096
+2025-11-01 01:06:52,250 - INFO - Email sent successfully: Freight Logistics Automation - SUCCESS
+2025-11-01 01:06:52,250 - INFO - Success notification sent
+2025-11-04 11:59:27,242 - INFO - Simple Freight Logistics Automation Started
+2025-11-04 11:59:27,242 - INFO - Project Directory: C:\Cursor AI_projects\Aus_Freight_Logistic
+2025-11-04 11:59:27,242 - INFO - Starting Freight Logistics Automation
+2025-11-04 11:59:27,244 - INFO - Started at: 2025-11-04 11:59:27
+2025-11-04 11:59:27,244 - INFO - Force fresh data download - running extractor...
+2025-11-04 11:59:27,244 - INFO - Collecting fresh data from ABS website...
+2025-11-04 12:01:00,209 - INFO - Data collection completed successfully
+2025-11-04 12:01:00,209 - INFO - Running data cleaning...
+2025-11-04 12:06:27,769 - INFO - Data cleaning completed successfully
+2025-11-04 12:06:27,769 - INFO - Running data analysis...
+2025-11-04 12:17:13,320 - INFO - Data analysis completed successfully
+2025-11-04 12:17:13,321 - INFO - Updating dashboard...
+2025-11-04 12:17:13,322 - INFO - Dashboard updated successfully
+2025-11-04 12:17:13,322 - INFO - Dashboard available at: http://localhost:8501
+2025-11-04 12:17:13,322 - INFO - Automation completed successfully!
+2025-11-04 12:17:13,325 - INFO - Duration: 0:17:46.078772
+2025-11-04 12:17:18,466 - INFO - Email sent successfully: Freight Logistics Automation - SUCCESS
+2025-11-04 12:17:18,467 - INFO - Success notification sent
