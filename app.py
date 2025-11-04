@@ -375,6 +375,28 @@ def ensure_data_file() -> str:
         if col in df.columns:
             df[col] = df[col].fillna('Unknown')
     
+    # Fix country code issues (match notebook) - this affects unique country count
+    try:
+        from country_mapping import map_country_code_to_name
+        # Fix "Country Code XXX" entries
+        if 'country_of_destination' in df.columns:
+            country_code_mask = df['country_of_destination'].astype(str).str.contains('Country Code', na=False)
+            if country_code_mask.any():
+                # Extract the country code (remove "Country Code " prefix)
+                df.loc[country_code_mask, 'country_of_destination'] = df.loc[country_code_mask, 'country_of_destination'].str.replace('Country Code ', '')
+                # Apply proper mapping
+                df.loc[country_code_mask, 'country_of_destination'] = df.loc[country_code_mask, 'country_of_destination'].apply(map_country_code_to_name)
+            
+            # Also fix country codes from country_of_destination_code column if it exists
+            if 'country_of_destination_code' in df.columns:
+                from country_mapping import is_problematic_country_name
+                problematic_mask = df['country_of_destination'].apply(is_problematic_country_name)
+                if problematic_mask.any():
+                    df.loc[problematic_mask, 'country_of_destination'] = df.loc[problematic_mask, 'country_of_destination_code'].apply(map_country_code_to_name)
+    except ImportError:
+        # If country_mapping not available, skip this step
+        pass
+    
     # Clean product descriptions (match notebook)
     if 'product_description' in df.columns:
         df['product_description'] = df['product_description'].astype(str).str.strip()
@@ -382,6 +404,18 @@ def ensure_data_file() -> str:
         df['product_description'] = df['product_description'].str.replace(r'[\n\r\t]+', ' ', regex=True)
         df['product_description'] = df['product_description'].str.replace('"', '', regex=False)
         df['product_description'] = df['product_description'].str.replace("'", '', regex=False)
+    
+    # Apply SITC code mapping to unclassified products (match notebook) - affects unique product count
+    try:
+        from sitc_mapping import map_sitc_to_product, get_unclassified_patterns
+        if 'product_description' in df.columns and 'prod_descpt_code' in df.columns:
+            unclassified_patterns = '|'.join(get_unclassified_patterns())
+            mask_unclassified = df['product_description'].astype(str).str.contains(unclassified_patterns, case=False, na=False)
+            if mask_unclassified.any():
+                df.loc[mask_unclassified, 'product_description'] = df.loc[mask_unclassified, 'prod_descpt_code'].apply(map_sitc_to_product)
+    except ImportError:
+        # If sitc_mapping not available, skip this step
+        pass
     
     # Extract year if missing
     if 'month' in df.columns and 'year' not in df.columns:
