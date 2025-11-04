@@ -656,12 +656,22 @@ def compute_kpis_chunked(file_path: str) -> dict:
 def get_filter_options(file_path: str) -> dict:
     """Get filter options (dates, countries, products) without loading full dataset."""
     try:
-        # Sample only 10k rows to get unique values
-        sample = pd.read_csv(file_path, nrows=10000, usecols=['date', 'country_of_destination', 'product_description', 'year', 'month'])
+        # Sample only 10k rows to get unique values - don't request 'date' (it's derived)
+        sample = pd.read_csv(file_path, nrows=10000, usecols=['country_of_destination', 'product_description', 'year', 'month', 'month_number'])
         
-        # Convert date if needed
-        if 'date' in sample.columns:
-            sample['date'] = pd.to_datetime(sample['date'], errors='coerce')
+        # Create date column from year and month_number if they exist
+        if 'year' in sample.columns and 'month_number' in sample.columns:
+            sample['date'] = pd.to_datetime(sample['year'].astype(str) + '-' + sample['month_number'].astype(str).str.zfill(2) + '-01')
+        elif 'month' in sample.columns and 'year' in sample.columns:
+            # Try to extract month_number from month string
+            month_map = {
+                'January': 1, 'February': 2, 'March': 3, 'April': 4,
+                'May': 5, 'June': 6, 'July': 7, 'August': 8,
+                'September': 9, 'October': 10, 'November': 11, 'December': 12
+            }
+            sample['month_name'] = sample['month'].astype(str).str.split().str[0]
+            sample['month_number'] = sample['month_name'].map(month_map).fillna(1)
+            sample['date'] = pd.to_datetime(sample['year'].astype(str) + '-' + sample['month_number'].astype(str).str.zfill(2) + '-01')
         
         return {
             'min_date': sample['date'].min().date() if 'date' in sample.columns else None,
@@ -705,10 +715,15 @@ def load_data(columns: list = None, filters: dict = None):
 try:
     with st.spinner('Loading data... This may take a moment for the full dataset.'):
         # Define essential columns only - don't load unnecessary columns
-        essential_columns = ['date', 'year', 'month', 'month_number', 'value_fob_aud', 
+        # NOTE: 'date' is derived (created from year + month_number), not in CSV
+        essential_columns = ['year', 'month', 'month_number', 'value_fob_aud', 
                             'gross_weight_tonnes', 'quantity', 'country_of_destination', 
                             'product_description', 'prod_descpt_code', 'state_of_origin']
         df, accurate_kpis = load_data(columns=essential_columns)  # Load only essential columns
+        
+        # Ensure 'date' column exists (it's created during chunk processing)
+        if 'date' not in df.columns and 'year' in df.columns and 'month_number' in df.columns:
+            df['date'] = pd.to_datetime(df['year'].astype(str) + '-' + df['month_number'].astype(str).str.zfill(2) + '-01')
 except Exception as e:
     st.error(f"Failed to load data: {str(e)}")
     st.stop()
@@ -778,8 +793,17 @@ if df is not None and accurate_kpis is not None:
     
     # Date range filter
     st.sidebar.subheader("Date Range")
-    min_date = df['date'].min().date()
-    max_date = df['date'].max().date()
+    # Ensure date column exists (created during loading but verify)
+    if 'date' not in df.columns and 'year' in df.columns and 'month_number' in df.columns:
+        df['date'] = pd.to_datetime(df['year'].astype(str) + '-' + df['month_number'].astype(str).str.zfill(2) + '-01')
+    
+    if 'date' in df.columns:
+        min_date = df['date'].min().date()
+        max_date = df['date'].max().date()
+    else:
+        # Fallback: use year and month_number
+        min_date = datetime(int(df['year'].min()), int(df['month_number'].min()), 1).date()
+        max_date = datetime(int(df['year'].max()), int(df['month_number'].max()), 28).date()
     
     date_range = st.sidebar.date_input(
         "Select Date Range",
