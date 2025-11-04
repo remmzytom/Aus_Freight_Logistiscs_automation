@@ -585,6 +585,18 @@ def compute_kpis_chunked(file_path: str, file_mtime: float = None) -> dict:
         elif total_value == 0:
             st.warning("⚠️ Total export value is zero. Data might be incomplete.")
         
+        # Debug: Log computed values to help diagnose mismatches
+        # Expected values from notebook:
+        # Total Records: 1,479,965
+        # Countries: 219
+        # Products: 2,341
+        # Total Export Value: AUD $1,031,293,072,667.00
+        # Average: AUD $696,836.12
+        # Median: AUD $7,168.00
+        # Total Weight: 2,780,691,054.60 tonnes
+        if abs(total_records - 1479965) > 1000 or abs(total_value - 1031293072667.00) > 1e9:
+            st.warning(f"⚠️ Data mismatch detected! Computed: {total_records:,} records, ${total_value:,.2f} total value. Expected: 1,479,965 records, $1,031,293,072,667.00")
+        
         return {
             'total_value': total_value,
             'total_weight': total_weight,
@@ -1203,75 +1215,87 @@ if accurate_kpis is not None:
             if show_debug:
                 import pandas as pd
                 import re
-                st.sidebar.markdown("**Debug (streamed from cleaned CSV)**")
-                chunk_size = 50000
-                total_rows = 0
-                total_val = 0.0
-                total_weight = 0.0
-                value_na = 0
-                weight_na = 0
-                detected_product_col = None
-                sample_products = []
-                unique_countries = set()
-                unique_products = set()
-
-                def _norm_txt(x: str) -> str:
-                    return re.sub(r"\s+", " ", str(x).strip()).lower()
-
-                for chunk in pd.read_csv(file_path, chunksize=chunk_size, low_memory=False):
-                    total_rows += len(chunk)
-
-                    if 'value_fob_aud' in chunk.columns:
-                        s = pd.to_numeric(chunk['value_fob_aud'], errors='coerce')
-                        value_na += int(s.isna().sum())
-                        total_val += float(s.fillna(0).sum())
-                    if 'gross_weight_tonnes' in chunk.columns:
-                        s2 = pd.to_numeric(chunk['gross_weight_tonnes'], errors='coerce')
-                        weight_na += int(s2.isna().sum())
-                        total_weight += float(s2.fillna(0).sum())
-
-                    # Detect product column once
-                    if detected_product_col is None:
-                        if 'product_description' in chunk.columns:
-                            detected_product_col = 'product_description'
+                st.sidebar.markdown("**Debug (using EXACT notebook method)**")
+                
+                # Use EXACT same method as compute_kpis_chunked - load full file like notebook
+                try:
+                    df_debug = pd.read_csv(file_path)
+                    
+                    # Show actual columns in CSV
+                    st.sidebar.write(f"**CSV Columns:** {list(df_debug.columns)[:5]}...")
+                    
+                    # Ensure product_description exists (same as KPI function)
+                    if 'product_description' not in df_debug.columns:
+                        if 'sitc' in df_debug.columns:
+                            df_debug['product_description'] = df_debug['sitc']
+                            detected_product_col = 'sitc (mapped to product_description)'
                         else:
-                            for col in chunk.columns:
-                                cn = re.sub(r"[^a-z0-9]", "", str(col).lower())
-                                if 'product' in cn and 'description' in cn:
-                                    detected_product_col = col
+                            product_col = None
+                            for col in df_debug.columns:
+                                col_lower = re.sub(r"[^a-z0-9]", "", str(col).lower())
+                                if 'product' in col_lower and 'description' in col_lower:
+                                    product_col = col
                                     break
-
-                    # Sample first product descriptions
-                    if detected_product_col and detected_product_col in chunk.columns and len(sample_products) < 5:
-                        vals = chunk[detected_product_col].dropna().astype(str).str.strip()
-                        for v in vals:
-                            nv = _norm_txt(v)
-                            if nv and nv not in {'all products','all product','all_products'}:
-                                sample_products.append(v)
-                                if len(sample_products) >= 5:
-                                    break
-
-                    # Unique sets (normalized) for counts
-                    if 'country_of_destination' in chunk.columns:
-                        for c in chunk['country_of_destination'].dropna():
-                            nc = _norm_txt(c)
-                            if nc:
-                                unique_countries.add(nc)
-                    if detected_product_col and detected_product_col in chunk.columns:
-                        for p in chunk[detected_product_col].dropna():
-                            npv = _norm_txt(p)
-                            if npv and npv not in {'all products','all product','all_products'}:
-                                unique_products.add(npv)
-
-                st.sidebar.write(f"Detected product column: {detected_product_col}")
-                st.sidebar.write(f"Sample products: {sample_products}")
-                st.sidebar.write(f"Parsed rows: {total_rows:,}")
-                st.sidebar.write(f"Value NA (coerced): {value_na:,}")
-                st.sidebar.write(f"Weight NA (coerced): {weight_na:,}")
-                st.sidebar.write(f"Sum value_fob_aud (debug): ${total_val:,.2f}")
-                st.sidebar.write(f"Sum gross_weight_tonnes (debug): {total_weight:,.2f}")
-                st.sidebar.write(f"Country count (debug): {len(unique_countries):,}")
-                st.sidebar.write(f"Product count (debug): {len(unique_products):,}")
+                                elif 'sitc' in col_lower and product_col is None:
+                                    product_col = col
+                            if product_col:
+                                df_debug['product_description'] = df_debug[product_col]
+                                detected_product_col = f"{product_col} (mapped to product_description)"
+                            else:
+                                df_debug['product_description'] = 'All Products'
+                                detected_product_col = 'None (using placeholder)'
+                    else:
+                        detected_product_col = 'product_description'
+                    
+                    # Ensure numeric columns (same as KPI function)
+                    if 'value_fob_aud' in df_debug.columns:
+                        df_debug['value_fob_aud'] = pd.to_numeric(df_debug['value_fob_aud'], errors='coerce').fillna(0)
+                    if 'gross_weight_tonnes' in df_debug.columns:
+                        df_debug['gross_weight_tonnes'] = pd.to_numeric(df_debug['gross_weight_tonnes'], errors='coerce').fillna(0)
+                    
+                    # Compute EXACTLY like notebook and KPI function
+                    total_rows = len(df_debug)
+                    total_val = float(df_debug['value_fob_aud'].sum())
+                    total_weight = float(df_debug['gross_weight_tonnes'].sum())
+                    country_count = int(df_debug['country_of_destination'].nunique())
+                    product_count = int(df_debug['product_description'].nunique())
+                    avg_val = float(df_debug['value_fob_aud'].mean())
+                    median_val = float(df_debug['value_fob_aud'].median())
+                    
+                    # Sample products
+                    sample_products = df_debug['product_description'].dropna().head(5).tolist()
+                    
+                    # Show data type info
+                    value_dtype = str(df_debug['value_fob_aud'].dtype)
+                    weight_dtype = str(df_debug['gross_weight_tonnes'].dtype)
+                    
+                    st.sidebar.write(f"**Detected product column:** {detected_product_col}")
+                    st.sidebar.write(f"**Sample products:** {sample_products[:3]}")
+                    st.sidebar.write(f"**Parsed rows:** {total_rows:,}")
+                    st.sidebar.write(f"**value_fob_aud dtype:** {value_dtype}")
+                    st.sidebar.write(f"**gross_weight_tonnes dtype:** {weight_dtype}")
+                    st.sidebar.write(f"**Sum value_fob_aud:** ${total_val:,.2f}")
+                    st.sidebar.write(f"**Sum gross_weight_tonnes:** {total_weight:,.2f}")
+                    st.sidebar.write(f"**Country count:** {country_count:,}")
+                    st.sidebar.write(f"**Product count:** {product_count:,}")
+                    st.sidebar.write(f"**Avg value:** ${avg_val:,.2f}")
+                    st.sidebar.write(f"**Median value:** ${median_val:,.2f}")
+                    
+                    # Compare with notebook expected values
+                    st.sidebar.markdown("---")
+                    st.sidebar.markdown("**Notebook Expected:**")
+                    st.sidebar.write(f"Records: 1,479,965")
+                    st.sidebar.write(f"Countries: 219")
+                    st.sidebar.write(f"Products: 2,341")
+                    st.sidebar.write(f"Total Value: $1,031,293,072,667.00")
+                    st.sidebar.write(f"Total Weight: 2,780,691,054.60")
+                    st.sidebar.write(f"Avg: $696,836.12")
+                    st.sidebar.write(f"Median: $7,168.00")
+                    
+                except Exception as e:
+                    st.sidebar.error(f"Debug error: {str(e)}")
+                    import traceback
+                    st.sidebar.code(traceback.format_exc())
     except Exception as e:
         st.error(f"Failed to ensure data file: {str(e)}")
         st.stop()
