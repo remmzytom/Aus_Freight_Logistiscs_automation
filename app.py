@@ -1277,14 +1277,10 @@ if df is not None and accurate_kpis is not None:
     
     st.plotly_chart(fig2)
     
-    # Chart 3: Performance Summary Table - EXACT from your notebook
+    # Chart 3: Dynamic Interactive Performance Summary Table
     st.subheader("Industry Performance Summary Table")
-    fig3, ax3 = plt.subplots(figsize=(14, 8))
     
-    # Hide the axes since we'll use a table
-    ax3.axis('off')
-    
-    # Create a comprehensive industry performance table (without Value/Tonne) - EXACT from your notebook
+    # Create a comprehensive industry performance table (without Value/Tonne) - Dynamic and updates with filters
     table_data = industry_analysis[['Total_Value', 'Shipment_Count', 'Avg_Value', 'Value_Percentage']].copy()
     
     # Format the data for better readability
@@ -1301,44 +1297,42 @@ if df is not None and accurate_kpis is not None:
         'Avg Value/Shipment ($K)': table_data['Avg_Value_K']
     })
     
-    # Create table visualization with better spacing
-    table = ax3.table(cellText=display_table.values,
-                      colLabels=display_table.columns,
-                      cellLoc='center',
-                      loc='center',
-                      bbox=[0.05, 0.1, 0.9, 0.8])  # Adjusted bbox for better spacing
+    # Reset index to make Industry a regular column for better sorting/filtering
+    display_table = display_table.reset_index(drop=True)
     
-    # Style the table
-    table.auto_set_font_size(False)
-    table.set_fontsize(8)
-    table.scale(1.3, 1.8)  # Adjusted scale to prevent overlap
-    
-    # Set column widths to prevent text overlap
-    col_widths = [0.3, 0.15, 0.15, 0.15, 0.25]  # Proportional column widths
-    for i, width in enumerate(col_widths):
-        for j in range(len(display_table) + 1):
-            table[(j, i)].set_width(width)
-    
-    # Color code the table header
-    for i in range(len(display_table.columns)):
-        table[(0, i)].set_facecolor('#4CAF50')
-        table[(0, i)].set_text_props(weight='bold', color='white')
-    
-    # Color code rows alternately
-    for i in range(1, len(display_table) + 1):
-        for j in range(len(display_table.columns)):
-            if i % 2 == 0:
-                table[(i, j)].set_facecolor('#f0f0f0')
-            else:
-                table[(i, j)].set_facecolor('white')
-    
-    # Make the table title with better positioning
-    ax3.text(0.5, 0.95, 'Industry Performance Summary Table', 
-             transform=ax3.transAxes, fontsize=14, fontweight='bold', ha='center')
-    
-    plt.tight_layout()
-    st.pyplot(fig3)
-    plt.close(fig3)
+    # Display as interactive, sortable, and searchable table using Streamlit
+    st.dataframe(
+        display_table,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            'Industry': st.column_config.TextColumn(
+                'Industry',
+                width='medium',
+                help='Industry category'
+            ),
+            'Total Value ($B)': st.column_config.NumberColumn(
+                'Total Value ($B)',
+                format='%.2f',
+                help='Total export value in billions of AUD'
+            ),
+            'Market Share (%)': st.column_config.NumberColumn(
+                'Market Share (%)',
+                format='%.1f',
+                help='Percentage of total market share'
+            ),
+            'Shipments (K)': st.column_config.NumberColumn(
+                'Shipments (K)',
+                format='%.0f',
+                help='Number of shipments in thousands'
+            ),
+            'Avg Value/Shipment ($K)': st.column_config.NumberColumn(
+                'Avg Value/Shipment ($K)',
+                format='%.0f',
+                help='Average value per shipment in thousands of AUD'
+            )
+        }
+    )
     
     # Clean dashboard - no unnecessary text
     
