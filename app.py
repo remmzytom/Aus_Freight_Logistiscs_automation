@@ -911,7 +911,13 @@ if df is not None and accurate_kpis is not None:
         """, unsafe_allow_html=True)
     
     # 2. TIME SERIES ANALYSIS (from your notebook Cell 6)
-    try:
+    # On-demand lazy render
+    if 'load_ts' not in st.session_state:
+        st.session_state['load_ts'] = False
+    with st.expander("Time Series Analysis (click to load)", expanded=False):
+        if st.button("Load Time Series", key="btn_ts"):
+            st.session_state['load_ts'] = True
+    if st.session_state['load_ts']:
         st.markdown('<h2 class="section-header">Time Series Analysis</h2>', unsafe_allow_html=True)
         
         # Check required columns exist
@@ -1055,10 +1061,6 @@ if df is not None and accurate_kpis is not None:
                     st.warning("No data available for the selected date range. Please adjust your date filter.")
         else:
             st.warning(f"Missing required columns for time series analysis: {missing_cols}")
-    except Exception as e:
-        st.error(f"Error in Time Series Analysis: {str(e)}")
-        import traceback
-        st.code(traceback.format_exc())
     
     # Clean up memory after time series section
     gc.collect()
@@ -1066,10 +1068,17 @@ if df is not None and accurate_kpis is not None:
     # Clean presentation - no redundant tables
     
     # 3. COUNTRY ANALYSIS (from your notebook Cell 9)
-    st.markdown('<h2 class="section-header">Country Analysis</h2>', unsafe_allow_html=True)
-    
-    # Top export destinations (per-session cached)
-    top_countries = _session_get('top_countries', _KEY, agg_top_countries)
+    top_countries = pd.DataFrame(columns=['value_fob_aud','gross_weight_tonnes'])
+    if 'load_country' not in st.session_state:
+        st.session_state['load_country'] = False
+    with st.expander("Country Analysis (click to load)", expanded=False):
+        if st.button("Load Country Analysis", key="btn_country"):
+            st.session_state['load_country'] = True
+    if st.session_state['load_country']:
+        st.markdown('<h2 class="section-header">Country Analysis</h2>', unsafe_allow_html=True)
+        
+        # Top export destinations (per-session cached)
+        top_countries = _session_get('top_countries', _KEY, agg_top_countries)
     
     # Check if we have data for the selected date range
     if len(top_countries) > 0:
@@ -1118,10 +1127,18 @@ if df is not None and accurate_kpis is not None:
     del fig; gc.collect()
     
     # 4. PRODUCT ANALYSIS (from your notebook Cell 11)
-    st.markdown('<h2 class="section-header">Product Analysis</h2>', unsafe_allow_html=True)
-    
-    # Top 20 products by value (per-session cached)
-    top_products = _session_get('top_products', _KEY, agg_top_products)
+    top_products = pd.DataFrame(columns=['value_fob_aud','gross_weight_tonnes'])
+    top_20_display = pd.DataFrame(columns=['Product','Value ($B)','Weight (M Tonnes)','% Total'])
+    if 'load_product' not in st.session_state:
+        st.session_state['load_product'] = False
+    with st.expander("Product Analysis (click to load)", expanded=False):
+        if st.button("Load Product Analysis", key="btn_product"):
+            st.session_state['load_product'] = True
+    if st.session_state['load_product']:
+        st.markdown('<h2 class="section-header">Product Analysis</h2>', unsafe_allow_html=True)
+        
+        # Top 20 products by value (per-session cached)
+        top_products = _session_get('top_products', _KEY, agg_top_products)
 
     # Create clean display columns (rounded to 2 decimal places)
     top_products['Value ($B)'] = (top_products['value_fob_aud'] / 1e9).round(2)
@@ -1180,10 +1197,16 @@ if df is not None and accurate_kpis is not None:
     del fig; gc.collect()
     
     # 4.5. INDUSTRY CATEGORY ANALYSIS (EXACT from your notebook) - Using FULL dataset
-    st.markdown('<h2 class="section-header">Industry Category Analysis</h2>', unsafe_allow_html=True)
-    
-    # Use per-session cached industry aggregation
-    industry_analysis = _session_get('industry_analysis', _KEY, agg_industry)
+    if 'load_industry' not in st.session_state:
+        st.session_state['load_industry'] = False
+    with st.expander("Industry Category Analysis (click to load)", expanded=False):
+        if st.button("Load Industry Analysis", key="btn_industry"):
+            st.session_state['load_industry'] = True
+    if st.session_state['load_industry']:
+        st.markdown('<h2 class="section-header">Industry Category Analysis</h2>', unsafe_allow_html=True)
+        
+        # Use per-session cached industry aggregation
+        industry_analysis = _session_get('industry_analysis', _KEY, agg_industry)
     
     # Clean presentation - show only visualizations
     
@@ -1448,21 +1471,18 @@ if df is not None and accurate_kpis is not None:
     # Clean dashboard - no unnecessary text
     
     # 4.7. TOP 15 PORTS BY TONNAGE (EXACT from your notebook)
-    st.markdown('<h2 class="section-header">Top 15 Ports by Tonnage</h2>', unsafe_allow_html=True)
-    
-    # Use filtered dataset for Port Analysis to respect date range selection
-    df_full_ports = df_filtered.copy()
-    
-    # Add calculated fields to match your notebook
-    df_full_ports['date'] = pd.to_datetime(df_full_ports['year'].astype(str) + '-' + df_full_ports['month_number'].astype(str).str.zfill(2) + '-01')
-    df_full_ports['value_per_tonne'] = df_full_ports['value_fob_aud'] / df_full_ports['gross_weight_tonnes']
-    
-    # Clean dashboard - no unnecessary text
-    
-    # Group by port of loading and calculate total tonnage (cached per session)
-    port_tonnage = _session_get('ports_tonnage', _KEY, agg_ports).copy()
-    port_tonnage['tonnage_millions'] = port_tonnage['gross_weight_tonnes'] / 1e6
-    top_15_ports = port_tonnage.head(15)
+    if 'load_ports' not in st.session_state:
+        st.session_state['load_ports'] = False
+    with st.expander("Top 15 Ports by Tonnage (click to load)", expanded=False):
+        if st.button("Load Ports Analysis", key="btn_ports"):
+            st.session_state['load_ports'] = True
+    if st.session_state['load_ports']:
+        st.markdown('<h2 class="section-header">Top 15 Ports by Tonnage</h2>', unsafe_allow_html=True)
+        
+        # Group by port of loading and calculate total tonnage (cached per session)
+        port_tonnage = _session_get('ports_tonnage', _KEY, agg_ports).copy()
+        port_tonnage['tonnage_millions'] = port_tonnage['gross_weight_tonnes'] / 1e6
+        top_15_ports = port_tonnage.head(15)
     
     # Clean dashboard - no unnecessary text
     
