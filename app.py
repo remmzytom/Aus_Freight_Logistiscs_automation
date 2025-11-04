@@ -298,7 +298,7 @@ def ensure_data_file() -> str:
         # Check file age
         file_age_days = (time.time() - os.path.getmtime(cleaned_path)) / (60 * 60 * 24)
         if file_age_days > 30:
-            st.info(f"🔄 Data is {int(file_age_days)} days old. Refreshing from ABS website...")
+            st.info(f"Data is {int(file_age_days)} days old. Refreshing from ABS website...")
             needs_regeneration = True
         else:
             # Check if file has required columns (month_number might be missing from old files)
@@ -306,7 +306,7 @@ def ensure_data_file() -> str:
                 import pandas as pd
                 sample_df = pd.read_csv(cleaned_path, nrows=1)
                 if 'month_number' not in sample_df.columns:
-                    st.info("🔄 Updating data format (adding missing columns)...")
+                    st.info("Updating data format (adding missing columns)...")
                     needs_regeneration = True
                 elif not needs_regeneration:
                     # File exists, is fresh, and has required columns - return it
@@ -368,7 +368,7 @@ def ensure_data_file() -> str:
         df = df.drop(columns=['month_name'], errors='ignore')
 
     df.to_csv(cleaned_path, index=False)
-    st.success("✅ Data loaded and processed successfully!")
+    st.success("Data loaded and processed successfully!")
     return cleaned_path
 
 

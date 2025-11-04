@@ -11,3 +11,4 @@ openpyxl
 xlrd
 schedule
 scikit-learn
+Pillow
