@@ -374,23 +374,14 @@ def ensure_data_file() -> str:
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def load_exports_cleaned(path: str) -> pd.DataFrame:
-    """Load ALL data efficiently using chunked processing with aggressive memory management."""
-    import os
-    
-    # Check if running on Streamlit Cloud for optimized chunk sizes
-    is_streamlit_cloud = (
-        os.environ.get('STREAMLIT_SHARING', '').lower() == 'true' or
-        'streamlit.app' in os.environ.get('SERVER_NAME', '') or
-        os.path.exists('/app')
-    )
-    
-    # Use smaller chunks for cloud to reduce peak memory usage
-    chunk_size = 30000 if is_streamlit_cloud else 100000
+    """Load all columns in chunks, add compatibility shims, and downcast numerics to save RAM."""
+    # Load in chunks to avoid memory issues with large datasets
+    chunk_size = 100000  # 100k rows at a time
     chunks = []
     df_combined = None
     
     try:
-        for chunk in pd.read_csv(path, chunksize=chunk_size, low_memory=False):
+        for chunk in pd.read_csv(path, chunksize=chunk_size):
             # Apply transformations to each chunk
             # Ensure month_number exists
             if 'month_number' not in chunk.columns and 'month' in chunk.columns:
@@ -427,30 +418,27 @@ def load_exports_cleaned(path: str) -> pd.DataFrame:
             if 'prod_descpt_code' not in chunk.columns and 'sitc_code' in chunk.columns:
                 chunk['prod_descpt_code'] = chunk['sitc_code'].astype(str)
             
-            # Derived fields (before downcasting to preserve precision)
-            if 'year' in chunk.columns and 'month_number' in chunk.columns:
-                chunk['date'] = pd.to_datetime(chunk['year'].astype(str) + '-' + chunk['month_number'].astype(str).str.zfill(2) + '-01', errors='coerce')
-            if {'value_fob_aud','gross_weight_tonnes'}.issubset(chunk.columns):
-                chunk['value_per_tonne'] = (chunk['value_fob_aud'] / chunk['gross_weight_tonnes']).replace([np.inf, -np.inf], np.nan)
+            # Downcast numerics
+            for col in chunk.select_dtypes(include=['int64','float64']).columns:
+                if pd.api.types.is_integer_dtype(chunk[col]):
+                    chunk[col] = pd.to_numeric(chunk[col], downcast='integer')
+                else:
+                    chunk[col] = pd.to_numeric(chunk[col], downcast='float')
             
-            # Aggressively downcast numerics to save memory (critical for large datasets)
-            for col in chunk.select_dtypes(include=['int64']).columns:
-                chunk[col] = pd.to_numeric(chunk[col], downcast='integer', errors='ignore')
-            for col in chunk.select_dtypes(include=['float64']).columns:
-                chunk[col] = pd.to_numeric(chunk[col], downcast='float', errors='ignore')
+            # Derived fields
+            if 'year' in chunk.columns and 'month_number' in chunk.columns:
+                chunk['date'] = pd.to_datetime(chunk['year'].astype(str) + '-' + chunk['month_number'].astype(str).str.zfill(2) + '-01')
+            if {'value_fob_aud','gross_weight_tonnes'}.issubset(chunk.columns):
+                chunk['value_per_tonne'] = chunk['value_fob_aud'] / chunk['gross_weight_tonnes']
             
             chunks.append(chunk)
-            
-            # Combine chunks in smaller batches on cloud to reduce memory spikes
-            batch_size = 2 if is_streamlit_cloud else 5
-            if len(chunks) >= batch_size:
+            # Combine chunks in batches to reduce memory spikes
+            if len(chunks) >= 5:  # Combine every 5 chunks (500k rows)
                 if df_combined is None:
                     df_combined = pd.concat(chunks, ignore_index=True)
                 else:
                     df_combined = pd.concat([df_combined] + chunks, ignore_index=True)
                 chunks = []
-                # Aggressive memory cleanup
-                import gc
                 gc.collect()
         
         # Combine remaining chunks
