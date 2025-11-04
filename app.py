@@ -565,6 +565,14 @@ if df is not None and accurate_kpis is not None:
     # Sidebar controls
     st.sidebar.header("Dashboard Controls")
     
+    # Cache clear button
+    if st.sidebar.button("Clear Cache & Reload Data", help="Clear cached data and force fresh data reload"):
+        st.cache_data.clear()
+        st.success("Cache cleared! Refreshing...")
+        st.rerun()
+    
+    st.sidebar.markdown("---")
+    
     # Date range filter
     st.sidebar.subheader("Date Range")
     min_date = df['date'].min().date()
