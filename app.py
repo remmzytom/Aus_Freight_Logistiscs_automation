@@ -302,11 +302,11 @@ def ensure_data_file() -> str:
             st.info(f"🔄 Data is {int(file_age_days)} days old. Refreshing from ABS website...")
             needs_regeneration = True
         else:
-            # Check if file has required columns (month_number might be missing from old files)
+            # Check if file has required columns (month_number and product_description might be missing from old files)
             try:
                 import pandas as pd
                 sample_df = pd.read_csv(cleaned_path, nrows=1)
-                if 'month_number' not in sample_df.columns:
+                if 'month_number' not in sample_df.columns or 'product_description' not in sample_df.columns:
                     st.info("🔄 Updating data format (adding missing columns)...")
                     needs_regeneration = True
                 elif not needs_regeneration:
@@ -348,15 +348,32 @@ def ensure_data_file() -> str:
     if df is None:
         raise FileNotFoundError("No data available and automatic download failed")
 
-    # Minimal cleaning compatible with dashboard expectations
+    # Minimal cleaning compatible with dashboard expectations - MATCHES NOTEBOOK CLEANING
     import pandas as pd
+    # Rename columns to match notebook (data_cleaning.ipynb Cell 12)
+    if 'sitc' in df.columns and 'product_description' not in df.columns:
+        df = df.rename(columns={'sitc': 'product_description'})
+    if 'sitc_code' in df.columns and 'prod_descpt_code' not in df.columns:
+        df = df.rename(columns={'sitc_code': 'prod_descpt_code'})
+    
+    # Convert numeric columns (matches notebook)
     for col in ['quantity', 'gross_weight_tonnes', 'value_fob_aud']:
         if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors='coerce')
+            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+            # Convert negative values to 0 (matches notebook)
+            df[col] = df[col].clip(lower=0)
+    
+    # Fill missing text values (matches notebook)
+    if 'product_description' in df.columns:
+        df['product_description'] = df['product_description'].fillna('Unknown')
+    if 'country_of_destination' in df.columns:
+        df['country_of_destination'] = df['country_of_destination'].fillna('Unknown')
+    
     if 'month' in df.columns and 'year' not in df.columns:
         df['year'] = df['month'].astype(str).str.extract(r'(\d{4})')
+        df['year'] = pd.to_numeric(df['year'], errors='coerce')
     
-    # Create month_number column (required by dashboard)
+    # Create month_number column (required by dashboard, matches notebook Cell 22)
     if 'month' in df.columns and 'month_number' not in df.columns:
         month_map = {
             'January': 1, 'February': 2, 'March': 3, 'April': 4,
