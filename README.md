@@ -38,27 +38,10 @@ pip install -r requirements.txt
 python simple_automation.py
 ```
 
-4. **View dashboard (auto-opens in browser):**
-
-   **Option 1 - Double-click to launch (Windows):**
-   - Double-click `start_app.bat` - The app will automatically open in your browser
-   
-   **Option 2 - PowerShell:**
-   ```powershell
-   .\start_app.ps1
-   ```
-   
-   **Option 3 - Python launcher:**
-   ```bash
-   python launch_app.py
-   ```
-   
-   **Option 4 - Manual:**
-   ```bash
-   streamlit run app.py
-   ```
-   
-   All methods will automatically open the dashboard in your default browser!
+4. **View dashboard:**
+```bash
+streamlit run app.py
+```
 
 ## Project Structure
 
