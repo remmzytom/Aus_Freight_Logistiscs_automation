@@ -478,8 +478,8 @@ def ensure_data_file() -> str:
 @st.cache_data(ttl=60, max_entries=1, show_spinner=False)  # Very short TTL to free memory quickly
 def load_exports_cleaned(path: str) -> pd.DataFrame:
     """Load all columns in chunks, add compatibility shims, and downcast numerics to save RAM."""
-    # Load in smaller chunks to avoid memory issues with large datasets
-    chunk_size = 50000  # 50k rows at a time - reduced from 100k
+    # Load in optimized chunks - balance between memory and performance
+    chunk_size = 75000  # 75k rows at a time - optimized for full dataset loading
     chunks = []
     df_combined = None
     
@@ -536,7 +536,8 @@ def load_exports_cleaned(path: str) -> pd.DataFrame:
             
             chunks.append(chunk)
             # Combine chunks in smaller batches to reduce memory spikes
-            if len(chunks) >= 2:  # Combine every 2 chunks (200k rows) - reduced from 5
+            # Process and combine more frequently to avoid memory buildup
+            if len(chunks) >= 3:  # Combine every 3 chunks (150k rows) - balanced approach
                 if df_combined is None:
                     df_combined = pd.concat(chunks, ignore_index=True)
                 else:
@@ -604,6 +605,12 @@ def compute_kpis_chunked(file_path: str) -> dict:
         return None
 
 
+@st.cache_data(ttl=300, max_entries=1)  # Moderate TTL for full dataset
+def load_data_full(file_path: str) -> pd.DataFrame:
+    """Load full dataset using optimized chunked loading - memory efficient."""
+    # Use the existing chunked loading function which is already optimized
+    return load_exports_cleaned(file_path)
+
 @st.cache_data(ttl=60, max_entries=1)  # Very short TTL
 def load_data():
     """Efficiently load dataset - use lazy loading for large datasets."""
@@ -615,51 +622,48 @@ def load_data():
         if accurate_kpis is None:
             return None, None
         
-        # CRITICAL: Don't load full dataset - only load a sample for initial display
-        # Load only essential columns and limit rows for memory efficiency
-        try:
-            # Try to load just a sample first to check if file exists and is readable
-            sample_df = pd.read_csv(file_path, nrows=1000)
-            
-            # Get column names
-            required_cols = ['year', 'month_number', 'value_fob_aud', 'gross_weight_tonnes', 
-                           'country_of_destination', 'product_description', 'state_of_origin',
-                           'port_of_loading', 'mode_of_transport']
-            
-            # Only load columns that exist
-            cols_to_load = [col for col in required_cols if col in sample_df.columns]
-            
-            # Load dataset with row limit for very large files to prevent memory issues
-            # Check file size first
-            import os
-            file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
-            
-            # If file is very large (>100MB), limit rows to prevent memory issues
-            if file_size_mb > 100:
-                max_rows = 500000  # Limit to 500k rows for large files
-                st.warning(f"Large dataset detected ({file_size_mb:.1f}MB). Loading first {max_rows:,} rows for performance.")
-                df = pd.read_csv(file_path, usecols=cols_to_load, nrows=max_rows, low_memory=False)
-            else:
-                # Load full dataset but only essential columns - this saves significant memory
-                df = pd.read_csv(file_path, usecols=cols_to_load, low_memory=False)
-            
-            # Add derived columns if needed
-            if 'date' not in df.columns and 'year' in df.columns and 'month_number' in df.columns:
-                df['date'] = pd.to_datetime(df['year'].astype(str) + '-' + df['month_number'].astype(str).str.zfill(2) + '-01')
-            if 'value_per_tonne' not in df.columns and 'value_fob_aud' in df.columns and 'gross_weight_tonnes' in df.columns:
-                df['value_per_tonne'] = df['value_fob_aud'] / df['gross_weight_tonnes'].replace(0, np.nan)
-            
-            # Downcast to save memory
-            for col in df.select_dtypes(include=['int64']).columns:
-                df[col] = pd.to_numeric(df[col], downcast='integer')
-            for col in df.select_dtypes(include=['float64']).columns:
-                df[col] = pd.to_numeric(df[col], downcast='float')
-            
-            del sample_df
-            gc.collect()
-        except Exception as e:
-            st.error(f"Error loading data file: {str(e)}")
-            return None, None
+        # Check if user wants full dataset or fast mode
+        load_full = st.session_state.get('load_full_dataset', True)  # Default to full dataset
+        
+        if load_full:
+            # Load FULL dataset using optimized chunked loading
+            # This uses the load_exports_cleaned function which loads in chunks efficiently
+            df = load_data_full(file_path)
+        else:
+            # Fast mode: Load only essential columns with row limit
+            try:
+                sample_df = pd.read_csv(file_path, nrows=1000)
+                required_cols = ['year', 'month_number', 'value_fob_aud', 'gross_weight_tonnes', 
+                               'country_of_destination', 'product_description', 'state_of_origin',
+                               'port_of_loading', 'mode_of_transport']
+                cols_to_load = [col for col in required_cols if col in sample_df.columns]
+                
+                import os
+                file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
+                
+                if file_size_mb > 100:
+                    max_rows = 500000
+                    df = pd.read_csv(file_path, usecols=cols_to_load, nrows=max_rows, low_memory=False)
+                else:
+                    df = pd.read_csv(file_path, usecols=cols_to_load, low_memory=False)
+                
+                # Add derived columns
+                if 'date' not in df.columns and 'year' in df.columns and 'month_number' in df.columns:
+                    df['date'] = pd.to_datetime(df['year'].astype(str) + '-' + df['month_number'].astype(str).str.zfill(2) + '-01')
+                if 'value_per_tonne' not in df.columns and 'value_fob_aud' in df.columns and 'gross_weight_tonnes' in df.columns:
+                    df['value_per_tonne'] = df['value_fob_aud'] / df['gross_weight_tonnes'].replace(0, np.nan)
+                
+                # Downcast to save memory
+                for col in df.select_dtypes(include=['int64']).columns:
+                    df[col] = pd.to_numeric(df[col], downcast='integer')
+                for col in df.select_dtypes(include=['float64']).columns:
+                    df[col] = pd.to_numeric(df[col], downcast='float')
+                
+                del sample_df
+                gc.collect()
+            except Exception as e:
+                st.error(f"Error loading data file: {str(e)}")
+                return None, None
         
         gc.collect()
         return df, accurate_kpis
@@ -674,15 +678,49 @@ if 'df_loaded' not in st.session_state:
     st.session_state.df_loaded = None
     st.session_state.accurate_kpis = None
     st.session_state.data_file_path = None
+    st.session_state.load_full_dataset = True  # Default to full dataset
+
+# Sidebar option for data loading mode (before loading data)
+st.sidebar.header("Dashboard Controls")
+
+# Data loading mode toggle
+load_mode = st.sidebar.radio(
+    "Data Loading Mode",
+    ["Full Dataset (Recommended)", "Fast Mode (Limited Rows)"],
+    index=0 if st.session_state.load_full_dataset else 1,
+    help="Full Dataset: Loads all records using efficient chunked processing. Fast Mode: Limits to 500k rows for faster loading."
+)
+
+# Update session state
+st.session_state.load_full_dataset = (load_mode == "Full Dataset (Recommended)")
+
+# Check if we need to reload data (mode changed)
+if st.session_state.df_loaded is not None:
+    # Check if mode changed
+    current_mode_full = st.session_state.load_full_dataset
+    # If mode changed, clear cache and reload
+    if hasattr(st.session_state, 'last_load_mode'):
+        if st.session_state.last_load_mode != current_mode_full:
+            st.session_state.df_loaded = None
+            st.session_state.accurate_kpis = None
+            st.cache_data.clear()
+            st.rerun()
+    st.session_state.last_load_mode = current_mode_full
 
 # Load data with error handling - use session state to avoid reloading
 if st.session_state.df_loaded is None:
     try:
-        with st.spinner('Loading data... This may take a moment.'):
+        mode_text = "full dataset" if st.session_state.load_full_dataset else "sample data"
+        with st.spinner(f'Loading {mode_text}... This may take a moment.'):
             df, accurate_kpis = load_data()
             if df is not None:
                 st.session_state.df_loaded = df
                 st.session_state.accurate_kpis = accurate_kpis
+                st.session_state.last_load_mode = st.session_state.load_full_dataset
+                if st.session_state.load_full_dataset:
+                    st.success(f"✅ Loaded full dataset: {len(df):,} records")
+                else:
+                    st.info(f"⚡ Fast mode: Loaded {len(df):,} records")
             else:
                 st.error("Failed to load data")
                 st.stop()
@@ -724,10 +762,7 @@ if df is not None and accurate_kpis is not None:
             df['product_description'] = 'All Products'
     # Clean presentation - no status messages
     
-    # Sidebar controls
-    st.sidebar.header("Dashboard Controls")
-    
-    # Cache clear button
+    # Cache clear button (moved after data loading mode)
     if st.sidebar.button("Clear Cache & Reload Data", help="Clear cached data and force fresh data reload"):
         st.cache_data.clear()
         st.success("Cache cleared! Refreshing...")
