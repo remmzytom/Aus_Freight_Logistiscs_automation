@@ -842,9 +842,8 @@ if df is not None and accurate_kpis is not None:
     try:
         st.markdown('<h2 class="section-header">Time Series Analysis</h2>', unsafe_allow_html=True)
         
-        # Load data only for this section
-        with st.spinner('Loading time series data...'):
-            df_ts_raw = load_data_for_section('time_series', st.session_state.current_filters)
+        # Use filtered dataset for time series analysis
+        df_ts_raw = df_filtered.copy()
         
         if df_ts_raw.empty:
             st.warning("No data available for time series analysis.")
@@ -1023,9 +1022,8 @@ if df is not None and accurate_kpis is not None:
     # 3. COUNTRY ANALYSIS (from your notebook Cell 9) - LAZY LOADED
     st.markdown('<h2 class="section-header">Country Analysis</h2>', unsafe_allow_html=True)
     
-    # Load data only for this section
-    with st.spinner('Loading country analysis data...'):
-        df_country = load_data_for_section('country', st.session_state.current_filters)
+    # Use filtered dataset for country analysis
+    df_country = df_filtered.copy()
     
     if not df_country.empty:
         # Top export destinations (exact code from your notebook)
@@ -1088,9 +1086,8 @@ if df is not None and accurate_kpis is not None:
     # 4. PRODUCT ANALYSIS (from your notebook Cell 11) - LAZY LOADED
     st.markdown('<h2 class="section-header">Product Analysis</h2>', unsafe_allow_html=True)
     
-    # Load data only for this section
-    with st.spinner('Loading product analysis data...'):
-        df_product = load_data_for_section('product', st.session_state.current_filters)
+    # Use filtered dataset for product analysis
+    df_product = df_filtered.copy()
     
     if not df_product.empty:
         # Top 20 products by value (exact code from your notebook)
