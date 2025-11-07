@@ -605,36 +605,147 @@ def compute_kpis_chunked(file_path: str) -> dict:
 
 
 @st.cache_data(ttl=600)
-def load_data():
-    """Efficiently load dataset - use lazy loading for large datasets."""
+def load_metadata():
+    """Load only metadata needed for filters and KPIs - NOT the full dataset."""
     try:
         file_path = ensure_data_file()
         
         # Compute KPIs from chunks first (doesn't load full dataset)
         accurate_kpis = compute_kpis_chunked(file_path)
         if accurate_kpis is None:
-            return None, None
+            return None, None, None
         
-        # Now load the full dataset with optimizations
-        df = load_exports_cleaned(file_path)
+        # Load only a sample to get column names and date ranges for filters
+        sample_df = pd.read_csv(file_path, nrows=1000)
         
+        # Get unique values for filters (from sample - will be refined per section)
+        if 'country_of_destination' in sample_df.columns:
+            all_countries = sorted(sample_df['country_of_destination'].unique().tolist())
+        else:
+            all_countries = []
+        
+        if 'product_description' in sample_df.columns:
+            all_products = sorted(sample_df['product_description'].unique().tolist())
+        else:
+            all_products = []
+        
+        # Get date range from file (read last few rows for max date)
+        try:
+            # Read last 1000 rows to get max date
+            tail_df = pd.read_csv(file_path, skiprows=lambda x: x < max(0, sum(1 for _ in open(file_path)) - 1000))
+            if 'year' in tail_df.columns and 'month_number' in tail_df.columns:
+                tail_df['date'] = pd.to_datetime(tail_df['year'].astype(str) + '-' + tail_df['month_number'].astype(str).str.zfill(2) + '-01')
+                min_date = tail_df['date'].min().date()
+                max_date = tail_df['date'].max().date()
+            else:
+                min_date = datetime(2024, 1, 1).date()
+                max_date = datetime(2025, 12, 31).date()
+        except:
+            min_date = datetime(2024, 1, 1).date()
+            max_date = datetime(2025, 12, 31).date()
+        
+        del sample_df
         gc.collect()
-        return df, accurate_kpis
+        
+        return accurate_kpis, all_countries, all_products, min_date, max_date
     except Exception as e:
-        st.error(f"Error loading data: {str(e)}")
+        st.error(f"Error loading metadata: {str(e)}")
         import traceback
         st.code(traceback.format_exc())
-        return None, None
+        return None, None, None, None, None
 
-# Load data with error handling
+
+@st.cache_data(ttl=600)
+def load_data_for_section(section_name: str, filters: dict = None):
+    """Lazy load data for a specific section with optional filters.
+    Each section gets its own cached dataset, allowing independent memory management."""
+    try:
+        file_path = ensure_data_file()
+        
+        # Load data with optimizations
+        df = load_exports_cleaned(file_path)
+        
+        # Apply filters if provided
+        if filters:
+            if 'date_range' in filters and filters['date_range']:
+                start_date, end_date = filters['date_range']
+                if 'date' in df.columns:
+                    df = df[(df['date'].dt.date >= start_date) & (df['date'].dt.date <= end_date)]
+            
+            if 'countries' in filters and filters['countries']:
+                if 'All Countries' not in filters['countries']:
+                    df = df[df['country_of_destination'].isin(filters['countries'])]
+            
+            if 'products' in filters and filters['products']:
+                if 'All Products' not in filters['products']:
+                    df = df[df['product_description'].isin(filters['products'])]
+        
+        # Ensure product_description exists
+        if 'product_description' not in df.columns:
+            import re
+            def _norm(s: str) -> str:
+                return re.sub(r"[^a-z0-9]", "", str(s).lower())
+            candidates = ['product_description', 'product description', 'product', 'sitc', 'commodity', 'sitc description', 'sitc_description']
+            norm_to_col = { _norm(c): c for c in df.columns }
+            src = None
+            for cand in candidates:
+                key = _norm(cand)
+                if key in norm_to_col:
+                    src = norm_to_col[key]
+                    break
+            if src:
+                df['product_description'] = df[src].astype(str)
+            else:
+                df['product_description'] = 'All Products'
+        
+        gc.collect()
+        return df
+    except Exception as e:
+        st.error(f"Error loading data for {section_name}: {str(e)}")
+        import traceback
+        st.code(traceback.format_exc())
+        return pd.DataFrame()
+
+# Initialize session state for lazy loading
+if 'data_loaded' not in st.session_state:
+    st.session_state.data_loaded = False
+if 'current_filters' not in st.session_state:
+    st.session_state.current_filters = {}
+
+# Load metadata only (KPIs, filter options, date ranges) - NOT full dataset
 try:
-    with st.spinner('Loading data... This may take a moment for the full dataset.'):
-        df, accurate_kpis = load_data()
+    with st.spinner('Loading metadata...'):
+        metadata_result = load_metadata()
+        if metadata_result[0] is None:
+            st.error("Failed to load metadata")
+            st.stop()
+        accurate_kpis, all_countries, all_products, min_date, max_date = metadata_result
 except Exception as e:
-    st.error(f"Failed to load data: {str(e)}")
+    st.error(f"Failed to load metadata: {str(e)}")
     st.stop()
 
-if df is not None and accurate_kpis is not None:
+if accurate_kpis is not None:
+    # Helper function to safely execute sections with lazy loading
+    def safe_execute_with_lazy_load(section_func, section_name):
+        """Execute a section function with lazy loading and memory cleanup."""
+        try:
+            # Load data for this section
+            df_section = load_data_for_section(section_name, st.session_state.current_filters)
+            if df_section.empty:
+                st.warning(f"No data available for {section_name}")
+                return
+            
+            # Execute the section function with the loaded data
+            section_func(df_section)
+            
+            # Clean up memory immediately after section
+            del df_section
+            gc.collect()
+        except Exception as e:
+            st.error(f"Error in {section_name}: {str(e)}")
+            import traceback
+            st.code(traceback.format_exc())
+    
     # Helper function to safely execute sections
     def safe_execute(func, section_name):
         """Execute a function with error handling to prevent crashes."""
@@ -646,208 +757,215 @@ if df is not None and accurate_kpis is not None:
             import traceback
             st.code(traceback.format_exc())
     
-    # Final compatibility guard: ensure 'product_description' exists even if cached data is old
-    if 'product_description' not in df.columns:
-        import re
-        def _norm(s: str) -> str:
-            return re.sub(r"[^a-z0-9]", "", str(s).lower())
-        candidates = ['product_description', 'product description', 'product', 'sitc', 'commodity', 'sitc description', 'sitc_description']
-        norm_to_col = { _norm(c): c for c in df.columns }
-        src = None
-        for cand in candidates:
-            key = _norm(cand)
-            if key in norm_to_col:
-                src = norm_to_col[key]
-                break
-        if src:
-            df['product_description'] = df[src].astype(str)
-        else:
-            df['product_description'] = 'All Products'
-    # Clean presentation - no status messages
-    
     # Sidebar controls
     st.sidebar.header("Dashboard Controls")
     
     # Cache clear button
     if st.sidebar.button("Clear Cache & Reload Data", help="Clear cached data and force fresh data reload"):
         st.cache_data.clear()
+        st.session_state.data_loaded = False
+        st.session_state.current_filters = {}
         st.success("Cache cleared! Refreshing...")
         st.rerun()
     
     st.sidebar.markdown("---")
     
-    # Date range filter
+    # Date range filter (using metadata)
     st.sidebar.subheader("Date Range")
-    min_date = df['date'].min().date()
-    max_date = df['date'].max().date()
-    
     date_range = st.sidebar.date_input(
         "Select Date Range",
         value=(min_date, max_date),
-        min_value=min_date
+        min_value=min_date,
+        max_value=max_date
     )
     
-    # Filter data based on date range
-    if len(date_range) == 2:
-        start_date, end_date = date_range
-        df_filtered = df[(df['date'].dt.date >= start_date) & (df['date'].dt.date <= end_date)]
-    else:
-        df_filtered = df
-    
-    # Country filter
+    # Country filter (using metadata)
     st.sidebar.subheader("Country Filter")
-    all_countries = ['All Countries'] + sorted(df['country_of_destination'].unique().tolist())
+    country_options = ['All Countries'] + (all_countries if all_countries else [])
     selected_countries = st.sidebar.multiselect(
         "Select Countries",
-        options=all_countries,
+        options=country_options,
         default=['All Countries']
     )
     
-    if 'All Countries' not in selected_countries and selected_countries:
-        df_filtered = df_filtered[df_filtered['country_of_destination'].isin(selected_countries)]
-    
-    # Product filter
+    # Product filter (using metadata)
     st.sidebar.subheader("Product Filter")
-    all_products = ['All Products'] + sorted(df['product_description'].unique().tolist())
+    product_options = ['All Products'] + (all_products if all_products else [])
     selected_products = st.sidebar.multiselect(
         "Select Products",
-        options=all_products,
+        options=product_options,
         default=['All Products']
     )
     
-    if 'All Products' not in selected_products and selected_products:
-        df_filtered = df_filtered[df_filtered['product_description'].isin(selected_products)]
+    # Store filters in session state for lazy loading
+    if len(date_range) == 2:
+        st.session_state.current_filters = {
+            'date_range': (date_range[0], date_range[1]),
+            'countries': selected_countries,
+            'products': selected_products
+        }
+    else:
+        st.session_state.current_filters = {
+            'date_range': None,
+            'countries': selected_countries,
+            'products': selected_products
+        }
     
     # Main dashboard content
     
-    # 1. DATASET SUMMARY (from your notebook Cell 4)
+    # 1. DATASET SUMMARY (from your notebook Cell 4) - LAZY LOADED
     st.markdown('<h2 class="section-header">Dataset Summary</h2>', unsafe_allow_html=True)
     
-    col1, col2, col3, col4 = st.columns(4)
+    # Load data only for this section
+    with st.spinner('Loading summary data...'):
+        df_summary = load_data_for_section('summary', st.session_state.current_filters)
     
-    with col1:
-        st.markdown(f"""
-        <div class="metric-card">
-            <h3>Total Records</h3>
-            <h2>{len(df_filtered):,}</h2>
-            <p>Individual Shipments</p>
-        </div>
-        """, unsafe_allow_html=True)
+    if not df_summary.empty:
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.markdown(f"""
+            <div class="metric-card">
+                <h3>Total Records</h3>
+                <h2>{len(df_summary):,}</h2>
+                <p>Individual Shipments</p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col2:
+            st.markdown(f"""
+            <div class="metric-card">
+                <h3>Countries</h3>
+                <h2>{df_summary['country_of_destination'].nunique()}</h2>
+                <p>Export Destinations</p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col3:
+            st.markdown(f"""
+            <div class="metric-card">
+                <h3>Products</h3>
+                <h2>{df_summary['product_description'].nunique()}</h2>
+                <p>Product Types</p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col4:
+            st.markdown(f"""
+            <div class="metric-card">
+                <h3>States</h3>
+                <h2>{df_summary['state_of_origin'].nunique() if 'state_of_origin' in df_summary.columns else 0}</h2>
+                <p>Export States</p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        # Clean up memory
+        del df_summary
+        gc.collect()
+    else:
+        st.warning("No data available for summary")
     
-    with col2:
-        st.markdown(f"""
-        <div class="metric-card">
-            <h3>Countries</h3>
-            <h2>{df_filtered['country_of_destination'].nunique()}</h2>
-            <p>Export Destinations</p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col3:
-        st.markdown(f"""
-        <div class="metric-card">
-            <h3>Products</h3>
-            <h2>{df_filtered['product_description'].nunique()}</h2>
-            <p>Product Types</p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col4:
-        st.markdown(f"""
-        <div class="metric-card">
-            <h3>States</h3>
-            <h2>{df_filtered['state_of_origin'].nunique()}</h2>
-            <p>Export States</p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    # Financial Summary (from your notebook Cell 4)
+    # Financial Summary (from your notebook Cell 4) - LAZY LOADED
     st.markdown('<h2 class="section-header">Financial Summary</h2>', unsafe_allow_html=True)
     
-    col1, col2, col3, col4 = st.columns(4)
+    # Load data only for this section
+    with st.spinner('Loading financial data...'):
+        df_financial = load_data_for_section('financial', st.session_state.current_filters)
     
-    with col1:
-        # Calculate from filtered dataset to respect date range selection
-        total_value = df_filtered['value_fob_aud'].sum()
-        if total_value >= 1e9:
-            value_display = f"${total_value/1e9:.1f}B"
-        elif total_value >= 1e6:
-            value_display = f"${total_value/1e6:.1f}M"
-        elif total_value >= 1e3:
-            value_display = f"${total_value/1e3:.1f}K"
-        else:
-            value_display = f"${total_value:,.0f}"
-        st.markdown(f"""
-        <div class="metric-card">
-            <h3>Total Export Value</h3>
-            <h2>{value_display}</h2>
-            <p>Australian Dollars (Filtered Data)</p>
-        </div>
-        """, unsafe_allow_html=True)
+    if not df_financial.empty:
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            total_value = df_financial['value_fob_aud'].sum()
+            if total_value >= 1e9:
+                value_display = f"${total_value/1e9:.1f}B"
+            elif total_value >= 1e6:
+                value_display = f"${total_value/1e6:.1f}M"
+            elif total_value >= 1e3:
+                value_display = f"${total_value/1e3:.1f}K"
+            else:
+                value_display = f"${total_value:,.0f}"
+            st.markdown(f"""
+            <div class="metric-card">
+                <h3>Total Export Value</h3>
+                <h2>{value_display}</h2>
+                <p>Australian Dollars (Filtered Data)</p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col2:
+            avg_shipment = df_financial['value_fob_aud'].mean()
+            if avg_shipment >= 1e6:
+                avg_display = f"${avg_shipment/1e6:.1f}M"
+            elif avg_shipment >= 1e3:
+                avg_display = f"${avg_shipment/1e3:.1f}K"
+            else:
+                avg_display = f"${avg_shipment:,.0f}"
+            st.markdown(f"""
+            <div class="metric-card">
+                <h3>Avg Shipment Value</h3>
+                <h2>{avg_display}</h2>
+                <p>Australian Dollars (Filtered Data)</p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col3:
+            median_shipment = df_financial['value_fob_aud'].median()
+            if median_shipment >= 1e6:
+                median_display = f"${median_shipment/1e6:.1f}M"
+            elif median_shipment >= 1e3:
+                median_display = f"${median_shipment/1e3:.1f}K"
+            else:
+                median_display = f"${median_shipment:,.0f}"
+            st.markdown(f"""
+            <div class="metric-card">
+                <h3>Median Shipment</h3>
+                <h2>{median_display}</h2>
+                <p>Australian Dollars (Filtered Data)</p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col4:
+            total_weight = df_financial['gross_weight_tonnes'].sum()
+            if total_weight >= 1e9:
+                weight_display = f"{total_weight/1e9:.1f}B"
+            elif total_weight >= 1e6:
+                weight_display = f"{total_weight/1e6:.1f}M"
+            elif total_weight >= 1e3:
+                weight_display = f"{total_weight/1e3:.1f}K"
+            else:
+                weight_display = f"{total_weight:,.0f}"
+            st.markdown(f"""
+            <div class="metric-card">
+                <h3>Total Weight</h3>
+                <h2>{weight_display}</h2>
+                <p>Tonnes (Filtered Data)</p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        # Clean up memory
+        del df_financial
+        gc.collect()
+    else:
+        st.warning("No data available for financial summary")
     
-    with col2:
-        # Calculate from filtered dataset to respect date range selection
-        avg_shipment = df_filtered['value_fob_aud'].mean()
-        if avg_shipment >= 1e6:
-            avg_display = f"${avg_shipment/1e6:.1f}M"
-        elif avg_shipment >= 1e3:
-            avg_display = f"${avg_shipment/1e3:.1f}K"
-        else:
-            avg_display = f"${avg_shipment:,.0f}"
-        st.markdown(f"""
-        <div class="metric-card">
-            <h3>Avg Shipment Value</h3>
-            <h2>{avg_display}</h2>
-            <p>Australian Dollars (Filtered Data)</p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col3:
-        # Calculate from filtered dataset to respect date range selection
-        median_shipment = df_filtered['value_fob_aud'].median()
-        if median_shipment >= 1e6:
-            median_display = f"${median_shipment/1e6:.1f}M"
-        elif median_shipment >= 1e3:
-            median_display = f"${median_shipment/1e3:.1f}K"
-        else:
-            median_display = f"${median_shipment:,.0f}"
-        st.markdown(f"""
-        <div class="metric-card">
-            <h3>Median Shipment</h3>
-            <h2>{median_display}</h2>
-            <p>Australian Dollars (Filtered Data)</p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col4:
-        # Calculate from filtered dataset to respect date range selection
-        total_weight = df_filtered['gross_weight_tonnes'].sum()
-        if total_weight >= 1e9:
-            weight_display = f"{total_weight/1e9:.1f}B"
-        elif total_weight >= 1e6:
-            weight_display = f"{total_weight/1e6:.1f}M"
-        elif total_weight >= 1e3:
-            weight_display = f"{total_weight/1e3:.1f}K"
-        else:
-            weight_display = f"{total_weight:,.0f}"
-        st.markdown(f"""
-        <div class="metric-card">
-            <h3>Total Weight</h3>
-            <h2>{weight_display}</h2>
-            <p>Tonnes (Filtered Data)</p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    # 2. TIME SERIES ANALYSIS (from your notebook Cell 6)
+    # 2. TIME SERIES ANALYSIS (from your notebook Cell 6) - LAZY LOADED
     try:
         st.markdown('<h2 class="section-header">Time Series Analysis</h2>', unsafe_allow_html=True)
         
-        # Check required columns exist
-        required_cols = ['year', 'month_number', 'value_fob_aud', 'gross_weight_tonnes']
-        missing_cols = [col for col in required_cols if col not in df_filtered.columns]
-        if not missing_cols:
-            # Ensure month_number and year are not NaN for grouping
-            df_ts = df_filtered[df_filtered['month_number'].notna() & df_filtered['year'].notna()].copy()
+        # Load data only for this section
+        with st.spinner('Loading time series data...'):
+            df_ts_raw = load_data_for_section('time_series', st.session_state.current_filters)
+        
+        if df_ts_raw.empty:
+            st.warning("No data available for time series analysis.")
+        else:
+            # Check required columns exist
+            required_cols = ['year', 'month_number', 'value_fob_aud', 'gross_weight_tonnes']
+            missing_cols = [col for col in required_cols if col not in df_ts_raw.columns]
+            if not missing_cols:
+                # Ensure month_number and year are not NaN for grouping
+                df_ts = df_ts_raw[df_ts_raw['month_number'].notna() & df_ts_raw['year'].notna()].copy()
             
             if len(df_ts) == 0:
                 st.warning("No valid date data available for time series analysis.")
@@ -1009,11 +1127,16 @@ if df is not None and accurate_kpis is not None:
     
     # Clean presentation - no redundant tables
     
-    # 3. COUNTRY ANALYSIS (from your notebook Cell 9)
+    # 3. COUNTRY ANALYSIS (from your notebook Cell 9) - LAZY LOADED
     st.markdown('<h2 class="section-header">Country Analysis</h2>', unsafe_allow_html=True)
     
-    # Top export destinations (exact code from your notebook)
-    top_countries = df_filtered.groupby('country_of_destination').agg({
+    # Load data only for this section
+    with st.spinner('Loading country analysis data...'):
+        df_country = load_data_for_section('country', st.session_state.current_filters)
+    
+    if not df_country.empty:
+        # Top export destinations (exact code from your notebook)
+        top_countries = df_country.groupby('country_of_destination').agg({
         'value_fob_aud': 'sum',
         'gross_weight_tonnes': 'sum'
     }).sort_values('value_fob_aud', ascending=False)
@@ -1061,13 +1184,24 @@ if df is not None and accurate_kpis is not None:
         hovertemplate='<b>%{y}</b><br>Export Value: $%{x:.1f}B<extra></extra>'
     )
     
-    st.plotly_chart(fig)
+        st.plotly_chart(fig)
+        
+        # Clean up memory after country analysis
+        del df_country
+        gc.collect()
+    else:
+        st.warning("No data available for country analysis")
     
-    # 4. PRODUCT ANALYSIS (from your notebook Cell 11)
+    # 4. PRODUCT ANALYSIS (from your notebook Cell 11) - LAZY LOADED
     st.markdown('<h2 class="section-header">Product Analysis</h2>', unsafe_allow_html=True)
     
-    # Top 20 products by value (exact code from your notebook)
-    top_products = df_filtered.groupby('product_description').agg({
+    # Load data only for this section
+    with st.spinner('Loading product analysis data...'):
+        df_product = load_data_for_section('product', st.session_state.current_filters)
+    
+    if not df_product.empty:
+        # Top 20 products by value (exact code from your notebook)
+        top_products = df_product.groupby('product_description').agg({
         'value_fob_aud': 'sum',
         'gross_weight_tonnes': 'sum'
     }).sort_values('value_fob_aud', ascending=False)
@@ -1125,24 +1259,30 @@ if df is not None and accurate_kpis is not None:
     fig.update_yaxes(autorange="reversed")
     fig.update_xaxes(tickformat='$,.0f')
     
-    st.plotly_chart(fig)
+        st.plotly_chart(fig)
+        
+        # Clean up memory after product analysis
+        del df_product
+        gc.collect()
+    else:
+        st.warning("No data available for product analysis")
     
-    # 4.5. INDUSTRY CATEGORY ANALYSIS (EXACT from your notebook) - Using FULL dataset
+    # 4.5. INDUSTRY CATEGORY ANALYSIS (EXACT from your notebook) - LAZY LOADED
     st.markdown('<h2 class="section-header">Industry Category Analysis</h2>', unsafe_allow_html=True)
     
-    # Use the main dataset for accurate industry analysis (same as other sections)
+    # Load data only for this section
+    with st.spinner('Loading industry analysis data...'):
+        df_full_industry = load_data_for_section('industry', st.session_state.current_filters)
     
-    # Use the filtered dataset to respect date range selection
-    df_full_industry = df_filtered.copy()
-    
-    # SITC Code-based Product Categorization - Clean presentation
+    if not df_full_industry.empty:
+        # SITC Code-based Product Categorization - Clean presentation
 
-    # Ensure the expected code column exists; map from 'sitc_code' when available
-    if 'prod_descpt_code' not in df_full_industry.columns:
-        if 'sitc_code' in df_full_industry.columns:
-            df_full_industry['prod_descpt_code'] = df_full_industry['sitc_code'].astype(str)
-        else:
-            df_full_industry['prod_descpt_code'] = ''
+        # Ensure the expected code column exists; map from 'sitc_code' when available
+        if 'prod_descpt_code' not in df_full_industry.columns:
+            if 'sitc_code' in df_full_industry.columns:
+                df_full_industry['prod_descpt_code'] = df_full_industry['sitc_code'].astype(str)
+            else:
+                df_full_industry['prod_descpt_code'] = ''
 
     # Import SITC mapping and create sitc_category column
     try:
@@ -1363,41 +1503,47 @@ if df is not None and accurate_kpis is not None:
         'font-family': 'Segoe UI, Arial, sans-serif'
     })
     
-    # Display styled table using Streamlit
-    st.dataframe(
-        styled_table,
-        use_container_width=True,
-        hide_index=True
-    )
+        # Display styled table using Streamlit
+        st.dataframe(
+            styled_table,
+            use_container_width=True,
+            hide_index=True
+        )
+        
+        # Clean up memory after industry analysis
+        del df_full_industry
+        gc.collect()
+    else:
+        st.warning("No data available for industry analysis")
     
-    # Clean dashboard - no unnecessary text
-    
-    # 4.6. PRODUCT-MARKET ANALYSIS (EXACT from your notebook)
+    # 4.6. PRODUCT-MARKET ANALYSIS (EXACT from your notebook) - LAZY LOADED
     st.markdown('<h2 class="section-header">Product-Market Analysis</h2>', unsafe_allow_html=True)
     
-    # Use filtered dataset for Product-Market Analysis to respect date range selection
-    df_full_product_market = df_filtered.copy()
+    # Load data only for this section
+    with st.spinner('Loading product-market analysis data...'):
+        df_full_product_market = load_data_for_section('product_market', st.session_state.current_filters)
     
-    # Add calculated fields to match your notebook
-    df_full_product_market['date'] = pd.to_datetime(df_full_product_market['year'].astype(str) + '-' + df_full_product_market['month_number'].astype(str).str.zfill(2) + '-01')
-    df_full_product_market['value_per_tonne'] = df_full_product_market['value_fob_aud'] / df_full_product_market['gross_weight_tonnes']
+    if not df_full_product_market.empty:
+        # Add calculated fields to match your notebook
+        df_full_product_market['date'] = pd.to_datetime(df_full_product_market['year'].astype(str) + '-' + df_full_product_market['month_number'].astype(str).str.zfill(2) + '-01')
+        df_full_product_market['value_per_tonne'] = df_full_product_market['value_fob_aud'] / df_full_product_market['gross_weight_tonnes']
     
-    # Function to format large numbers with proper suffixes
-    def format_number(value):
-        """Format numbers with B, M, K suffixes and appropriate decimal places"""
-        if value >= 1e9:
-            return f"{value/1e9:.2f}B"
-        elif value >= 1e6:
-            return f"{value/1e6:.2f}M"
-        elif value >= 1e3:
-            return f"{value/1e3:.2f}K"
-        else:
-            return f"{value:.2f}"
-    
-    # Clean presentation - show only visualizations
-    
-    # Calculate data for visualizations
-    top_products = df_full_product_market.groupby('product_description').agg({
+        # Function to format large numbers with proper suffixes
+        def format_number(value):
+            """Format numbers with B, M, K suffixes and appropriate decimal places"""
+            if value >= 1e9:
+                return f"{value/1e9:.2f}B"
+            elif value >= 1e6:
+                return f"{value/1e6:.2f}M"
+            elif value >= 1e3:
+                return f"{value/1e3:.2f}K"
+            else:
+                return f"{value:.2f}"
+        
+        # Clean presentation - show only visualizations
+        
+        # Calculate data for visualizations
+        top_products = df_full_product_market.groupby('product_description').agg({
         'value_fob_aud': 'sum',
         'gross_weight_tonnes': 'sum',
         'country_of_destination': 'nunique'
@@ -1517,80 +1663,94 @@ if df is not None and accurate_kpis is not None:
     
     # Clean dashboard - no unnecessary text
     
-    # 4.7. TOP 15 PORTS BY TONNAGE (EXACT from your notebook)
+        # Clean up memory after product-market analysis
+        del df_full_product_market
+        gc.collect()
+    else:
+        st.warning("No data available for product-market analysis")
+    
+    # 4.7. TOP 15 PORTS BY TONNAGE (EXACT from your notebook) - LAZY LOADED
     st.markdown('<h2 class="section-header">Top 15 Ports by Tonnage</h2>', unsafe_allow_html=True)
     
-    # Use filtered dataset for Port Analysis to respect date range selection
-    df_full_ports = df_filtered.copy()
+    # Load data only for this section
+    with st.spinner('Loading ports data...'):
+        df_full_ports = load_data_for_section('ports', st.session_state.current_filters)
     
-    # Add calculated fields to match your notebook
-    df_full_ports['date'] = pd.to_datetime(df_full_ports['year'].astype(str) + '-' + df_full_ports['month_number'].astype(str).str.zfill(2) + '-01')
-    df_full_ports['value_per_tonne'] = df_full_ports['value_fob_aud'] / df_full_ports['gross_weight_tonnes']
+    if not df_full_ports.empty:
+        # Add calculated fields to match your notebook
+        df_full_ports['date'] = pd.to_datetime(df_full_ports['year'].astype(str) + '-' + df_full_ports['month_number'].astype(str).str.zfill(2) + '-01')
+        df_full_ports['value_per_tonne'] = df_full_ports['value_fob_aud'] / df_full_ports['gross_weight_tonnes']
     
-    # Clean dashboard - no unnecessary text
-    
-    # Group by port of loading and calculate total tonnage
-    port_tonnage = df_full_ports.groupby('port_of_loading')['gross_weight_tonnes'].sum().reset_index()
-    port_tonnage = port_tonnage.sort_values('gross_weight_tonnes', ascending=False)
-    port_tonnage['tonnage_millions'] = port_tonnage['gross_weight_tonnes'] / 1e6
-    top_15_ports = port_tonnage.head(15)
-    
-    # Clean dashboard - no unnecessary text
-    
-    # Create interactive lollipop chart
-    fig = go.Figure()
-    
-    # Add horizontal lines (sticks)
-    for i, (_, row) in enumerate(top_15_ports.iterrows()):
+        # Clean dashboard - no unnecessary text
+        
+        # Group by port of loading and calculate total tonnage
+        port_tonnage = df_full_ports.groupby('port_of_loading')['gross_weight_tonnes'].sum().reset_index()
+        port_tonnage = port_tonnage.sort_values('gross_weight_tonnes', ascending=False)
+        port_tonnage['tonnage_millions'] = port_tonnage['gross_weight_tonnes'] / 1e6
+        top_15_ports = port_tonnage.head(15)
+        
+        # Clean dashboard - no unnecessary text
+        
+        # Create interactive lollipop chart
+        fig = go.Figure()
+        
+        # Add horizontal lines (sticks)
+        for i, (_, row) in enumerate(top_15_ports.iterrows()):
+            fig.add_trace(go.Scatter(
+                x=[0, row['tonnage_millions']],
+                y=[i, i],
+                mode='lines',
+                line=dict(color='gray', width=2),
+                showlegend=False,
+                hoverinfo='skip'
+            ))
+        
+        # Add dots (lollipops) at the end of each line
         fig.add_trace(go.Scatter(
-            x=[0, row['tonnage_millions']],
-            y=[i, i],
-            mode='lines',
-            line=dict(color='gray', width=2),
-            showlegend=False,
-            hoverinfo='skip'
+            x=top_15_ports['tonnage_millions'],
+            y=list(range(len(top_15_ports))),
+            mode='markers',
+            marker=dict(
+                size=15,
+                color=top_15_ports['tonnage_millions'],
+                colorscale='viridis',
+                line=dict(color='black', width=1)
+            ),
+            text=[f"{port}<br>Tonnage: {tonnage:.1f}M tonnes" for port, tonnage in zip(top_15_ports['port_of_loading'], top_15_ports['tonnage_millions'])],
+            hovertemplate='%{text}<extra></extra>',
+            name='Ports'
         ))
+        
+        # Update layout
+        fig.update_layout(
+            title='TOP 15 PORTS BY TONNAGE',
+            title_font_size=16,
+            title_font_color='#2c3e50',
+            xaxis_title='Tonnage (Million Tonnes)',
+            yaxis_title='Port',
+            xaxis_title_font_size=14,
+            yaxis_title_font_size=14,
+            template='plotly_white',
+            height=600,
+            yaxis=dict(
+                tickmode='array',
+                tickvals=list(range(len(top_15_ports))),
+                ticktext=top_15_ports['port_of_loading'].tolist(),
+                autorange="reversed"
+            ),
+            xaxis=dict(tickformat=',.1f'),
+            showlegend=False
+        )
+        
+        st.plotly_chart(fig)
+        
+        # Clean up memory after ports analysis
+        del df_full_ports
+        gc.collect()
+    else:
+        st.warning("No data available for ports analysis")
     
-    # Add dots (lollipops) at the end of each line
-    fig.add_trace(go.Scatter(
-        x=top_15_ports['tonnage_millions'],
-        y=list(range(len(top_15_ports))),
-        mode='markers',
-        marker=dict(
-            size=15,
-            color=top_15_ports['tonnage_millions'],
-            colorscale='viridis',
-            line=dict(color='black', width=1)
-        ),
-        text=[f"{port}<br>Tonnage: {tonnage:.1f}M tonnes" for port, tonnage in zip(top_15_ports['port_of_loading'], top_15_ports['tonnage_millions'])],
-        hovertemplate='%{text}<extra></extra>',
-        name='Ports'
-    ))
-    
-    # Update layout
-    fig.update_layout(
-        title='TOP 15 PORTS BY TONNAGE',
-        title_font_size=16,
-        title_font_color='#2c3e50',
-        xaxis_title='Tonnage (Million Tonnes)',
-        yaxis_title='Port',
-        xaxis_title_font_size=14,
-        yaxis_title_font_size=14,
-        template='plotly_white',
-        height=600,
-        yaxis=dict(
-            tickmode='array',
-            tickvals=list(range(len(top_15_ports))),
-            ticktext=top_15_ports['port_of_loading'].tolist(),
-            autorange="reversed"
-        ),
-        xaxis=dict(tickformat=',.1f'),
-        showlegend=False
-    )
-    
-    st.plotly_chart(fig)
-    
-    # 4.8. VOLUME VS VALUE ANALYSIS (EXACT from your notebook)
+    # 4.8. VOLUME VS VALUE ANALYSIS (EXACT from your notebook) - LAZY LOADED
     st.markdown('<h2 class="section-header">Volume vs Value Analysis</h2>', unsafe_allow_html=True)
     
     # Volume vs. Value Analysis by Product (EXACT from your notebook)
