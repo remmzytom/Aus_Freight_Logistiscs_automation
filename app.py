@@ -932,12 +932,15 @@ if df is not None and accurate_kpis is not None:
         </div>
         """, unsafe_allow_html=True)
     
+    # Force cleanup after overview
+    gc.collect()
+    
     # 2. TIME SERIES ANALYSIS (from your notebook Cell 6) - LAZY LOADED
     try:
         st.markdown('<h2 class="section-header">Time Series Analysis</h2>', unsafe_allow_html=True)
         
-        # Use filtered dataset for time series analysis
-        df_ts_raw = df_filtered.copy()
+        # Use filtered dataset for time series analysis - avoid copy
+        df_ts_raw = df_filtered  # Use view to save memory
         
         if df_ts_raw.empty:
             st.warning("No data available for time series analysis.")
@@ -946,8 +949,11 @@ if df is not None and accurate_kpis is not None:
             required_cols = ['year', 'month_number', 'value_fob_aud', 'gross_weight_tonnes']
             missing_cols = [col for col in required_cols if col not in df_ts_raw.columns]
             if not missing_cols:
-                # Ensure month_number and year are not NaN for grouping
-                df_ts = df_ts_raw[df_ts_raw['month_number'].notna() & df_ts_raw['year'].notna()].copy()
+                # Ensure month_number and year are not NaN for grouping - create copy only when needed
+                mask = df_ts_raw['month_number'].notna() & df_ts_raw['year'].notna()
+                df_ts = df_ts_raw[mask].copy()  # Only copy filtered subset
+                del mask
+                gc.collect()
                 
                 if len(df_ts) == 0:
                     st.warning("No valid date data available for time series analysis.")
@@ -963,10 +969,15 @@ if df is not None and accurate_kpis is not None:
                         df_ts['month'] = df_ts['month_number'].map(month_names).fillna('Unknown')
                         group_cols = ['year', 'month_number', 'month']
                     
+                    # Process aggregation efficiently
                     monthly = df_ts.groupby(group_cols).agg({
                         'value_fob_aud': 'sum',
                         'gross_weight_tonnes': 'sum'
                     }).reset_index().sort_values(['year', 'month_number'])
+                    
+                    # Clean up df_ts immediately after use
+                    del df_ts
+                    gc.collect()
                     
                     # Check if we have data for the selected date range
                     if len(monthly) > 0:
@@ -1099,32 +1110,37 @@ if df is not None and accurate_kpis is not None:
                         st.warning("No data available for the selected date range. Please adjust your date filter.")
             else:
                 st.warning(f"Missing required columns for time series analysis: {missing_cols}")
-            
-            # Clean up memory after time series section
-            del df_ts_raw
-            if 'df_ts' in locals():
-                del df_ts
-            gc.collect()
+                
+                # Clean up memory after time series section
+                del df_ts_raw
+                if 'monthly' in locals():
+                    del monthly
+                gc.collect()
     except Exception as e:
         st.error(f"Error in Time Series Analysis: {str(e)}")
         import traceback
         st.code(traceback.format_exc())
         gc.collect()
     
-    # Clean presentation - no redundant tables
+    # Force cleanup after time series
+    gc.collect()
     
     # 3. COUNTRY ANALYSIS (from your notebook Cell 9) - LAZY LOADED
     st.markdown('<h2 class="section-header">Country Analysis</h2>', unsafe_allow_html=True)
     
-    # Use filtered dataset for country analysis
-    df_country = df_filtered.copy()
+    # Use filtered dataset for country analysis - avoid copy
+    df_country = df_filtered  # Use view to save memory
     
     if not df_country.empty:
-        # Top export destinations (exact code from your notebook)
+        # Top export destinations - process efficiently
         top_countries = df_country.groupby('country_of_destination').agg({
             'value_fob_aud': 'sum',
             'gross_weight_tonnes': 'sum'
         }).sort_values('value_fob_aud', ascending=False)
+        
+        # Clean up df_country reference immediately
+        del df_country
+        gc.collect()
         
         # Check if we have data for the selected date range
         if len(top_countries) > 0:
@@ -1170,25 +1186,32 @@ if df is not None and accurate_kpis is not None:
             st.plotly_chart(fig)
             
             # Clean up memory after country analysis
-            del df_country
+            del top_countries, top_15, fig
             gc.collect()
         else:
             st.warning("No data available for the selected date range. Please adjust your date filter.")
     else:
         st.warning("No data available for country analysis")
     
+    # Force cleanup
+    gc.collect()
+    
     # 4. PRODUCT ANALYSIS (from your notebook Cell 11) - LAZY LOADED
     st.markdown('<h2 class="section-header">Product Analysis</h2>', unsafe_allow_html=True)
     
-    # Use filtered dataset for product analysis
-    df_product = df_filtered.copy()
+    # Use filtered dataset for product analysis - avoid copy
+    df_product = df_filtered  # Use view to save memory
     
     if not df_product.empty:
-        # Top 20 products by value (exact code from your notebook)
+        # Top 20 products by value - process efficiently
         top_products = df_product.groupby('product_description').agg({
             'value_fob_aud': 'sum',
             'gross_weight_tonnes': 'sum'
         }).sort_values('value_fob_aud', ascending=False)
+        
+        # Clean up df_product reference immediately
+        del df_product
+        gc.collect()
 
         # Create clean display columns (rounded to 2 decimal places)
         top_products['Value ($B)'] = (top_products['value_fob_aud'] / 1e9).round(2)
@@ -1246,18 +1269,21 @@ if df is not None and accurate_kpis is not None:
             st.warning("No data available for the selected date range. Please adjust your date filter.")
         
         # Clean up memory after product analysis
-        del df_product
+        del top_products, top_20_display, top_20_products, products_df, fig
         gc.collect()
     else:
         st.warning("No data available for product analysis")
+    
+    # Force cleanup
+    gc.collect()
     
     # 4.5. INDUSTRY CATEGORY ANALYSIS (EXACT from your notebook) - LAZY LOADED
     st.markdown('<h2 class="section-header">Industry Category Analysis</h2>', unsafe_allow_html=True)
     
     # Use the main dataset for accurate industry analysis (same as other sections)
     
-    # Use the filtered dataset to respect date range selection
-    df_full_industry = df_filtered.copy()
+    # Use the filtered dataset to respect date range selection - avoid copy
+    df_full_industry = df_filtered  # Use view to save memory
     
     # SITC Code-based Product Categorization - Clean presentation
 
@@ -1304,12 +1330,16 @@ if df is not None and accurate_kpis is not None:
     df_full_industry['industry_category'] = df_full_industry['prod_descpt_code'].apply(get_industry_category)
     # Clean dashboard - no unnecessary text
     
-    # Analyze by industry category (EXACT from your notebook)
+    # Analyze by industry category - process efficiently
     industry_analysis = df_full_industry.groupby('industry_category').agg({
         'value_fob_aud': ['sum', 'count', 'mean'],
         'gross_weight_tonnes': 'sum',
         'value_per_tonne': 'mean'
     }).round(2)
+    
+    # Clean up df_full_industry immediately after aggregation
+    del df_full_industry
+    gc.collect()
     
     # Flatten column names
     industry_analysis.columns = ['Total_Value', 'Shipment_Count', 'Avg_Value', 'Total_Weight', 'Avg_Value_per_Tonne']
@@ -1520,7 +1550,7 @@ if df is not None and accurate_kpis is not None:
     
     # Clean presentation - show only visualizations
     
-    # Calculate data for visualizations
+    # Calculate data for visualizations - process efficiently
     top_products = df_full_product_market.groupby('product_description').agg({
         'value_fob_aud': 'sum',
         'gross_weight_tonnes': 'sum',
@@ -1538,6 +1568,10 @@ if df is not None and accurate_kpis is not None:
     
     top_countries.columns = ['Total_Value', 'Total_Weight', 'Products_Imported']
     top_countries = top_countries.sort_values('Total_Value', ascending=False).head(15)
+    
+    # Clean up df_full_product_market immediately after aggregations
+    del df_full_product_market
+    gc.collect()
     
     # 4. PRODUCT-MARKET VISUALIZATIONS (Interactive Individual Charts)
     
@@ -1644,17 +1678,18 @@ if df is not None and accurate_kpis is not None:
     # 4.7. TOP 15 PORTS BY TONNAGE (EXACT from your notebook)
     st.markdown('<h2 class="section-header">Top 15 Ports by Tonnage</h2>', unsafe_allow_html=True)
     
-    # Use filtered dataset for Port Analysis to respect date range selection
-    df_full_ports = df_filtered.copy()
-    
-    # Add calculated fields to match your notebook
-    df_full_ports['date'] = pd.to_datetime(df_full_ports['year'].astype(str) + '-' + df_full_ports['month_number'].astype(str).str.zfill(2) + '-01')
-    df_full_ports['value_per_tonne'] = df_full_ports['value_fob_aud'] / df_full_ports['gross_weight_tonnes']
+    # Use filtered dataset for Port Analysis - columns already exist (date and value_per_tonne already calculated)
+    df_full_ports = df_filtered  # Use view to save memory
     
     # Clean dashboard - no unnecessary text
     
     # Group by port of loading and calculate total tonnage
     port_tonnage = df_full_ports.groupby('port_of_loading')['gross_weight_tonnes'].sum().reset_index()
+    
+    # Clean up df_full_ports immediately after aggregation
+    del df_full_ports
+    gc.collect()
+    
     port_tonnage = port_tonnage.sort_values('gross_weight_tonnes', ascending=False)
     port_tonnage['tonnage_millions'] = port_tonnage['gross_weight_tonnes'] / 1e6
     top_15_ports = port_tonnage.head(15)
@@ -1721,12 +1756,8 @@ if df is not None and accurate_kpis is not None:
     
     # st.write("**=== VOLUME VS. VALUE ANALYSIS BY PRODUCT (INDUSTRY-IDENTIFIED) ===**")
     
-    # Use filtered dataset for Volume vs Value Analysis to respect date range selection
-    df_full_volume_value = df_filtered.copy()
-    
-    # Add calculated fields to match your notebook
-    df_full_volume_value['date'] = pd.to_datetime(df_full_volume_value['year'].astype(str) + '-' + df_full_volume_value['month_number'].astype(str).str.zfill(2) + '-01')
-    df_full_volume_value['value_per_tonne'] = df_full_volume_value['value_fob_aud'] / df_full_volume_value['gross_weight_tonnes']
+    # Use filtered dataset for Volume vs Value Analysis - columns already exist (date and value_per_tonne already calculated)
+    df_full_volume_value = df_filtered  # Use view to save memory
     
     # Add industry category to full dataset
     # Ensure code column exists for this section as well
@@ -1756,9 +1787,14 @@ if df is not None and accurate_kpis is not None:
     }).round(2)
     
     # Calculate additional metrics
-    product_analysis['shipment_count'] = df_full_volume_value.groupby('product_description').size()
+    shipment_counts = df_full_volume_value.groupby('product_description').size()
+    product_analysis['shipment_count'] = product_analysis['product_description'].map(shipment_counts).fillna(0)
     product_analysis['avg_shipment_value'] = (product_analysis['value_fob_aud'] / product_analysis['shipment_count']).round(2)
     product_analysis['avg_shipment_weight'] = (product_analysis['gross_weight_tonnes'] / product_analysis['shipment_count']).round(2)
+    
+    # Clean up df_full_volume_value immediately after aggregations
+    del df_full_volume_value, shipment_counts
+    gc.collect()
     
     # Sort by total value
     product_analysis = product_analysis.sort_values('value_fob_aud', ascending=False)
@@ -2150,7 +2186,7 @@ if df is not None and accurate_kpis is not None:
     st.markdown('<h2 class="section-header">Regional Analysis</h2>', unsafe_allow_html=True)
     
     # Use filtered dataset for accurate regional analysis to respect date range selection
-    df_full = df_filtered.copy()
+    df_full = df_filtered  # Use view to save memory
     
     # Add calculated fields to match your notebook
     df_full['date'] = pd.to_datetime(df_full['year'].astype(str) + '-' + df_full['month_number'].astype(str).str.zfill(2) + '-01')
