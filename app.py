@@ -475,11 +475,11 @@ def ensure_data_file() -> str:
     return cleaned_path
 
 
-@st.cache_data(ttl=3600, show_spinner=False)
+@st.cache_data(ttl=60, max_entries=1, show_spinner=False)  # Very short TTL to free memory quickly
 def load_exports_cleaned(path: str) -> pd.DataFrame:
     """Load all columns in chunks, add compatibility shims, and downcast numerics to save RAM."""
-    # Load in chunks to avoid memory issues with large datasets
-    chunk_size = 100000  # 100k rows at a time
+    # Load in smaller chunks to avoid memory issues with large datasets
+    chunk_size = 50000  # 50k rows at a time - reduced from 100k
     chunks = []
     df_combined = None
     
@@ -535,8 +535,8 @@ def load_exports_cleaned(path: str) -> pd.DataFrame:
                 chunk['value_per_tonne'] = chunk['value_fob_aud'] / chunk['gross_weight_tonnes']
             
             chunks.append(chunk)
-            # Combine chunks in batches to reduce memory spikes
-            if len(chunks) >= 5:  # Combine every 5 chunks (500k rows)
+            # Combine chunks in smaller batches to reduce memory spikes
+            if len(chunks) >= 2:  # Combine every 2 chunks (200k rows) - reduced from 5
                 if df_combined is None:
                     df_combined = pd.concat(chunks, ignore_index=True)
                 else:
@@ -563,7 +563,7 @@ def load_exports_cleaned(path: str) -> pd.DataFrame:
         return pd.DataFrame()  # Return empty dataframe on error
 
 
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=60, max_entries=1)  # Very short TTL
 def compute_kpis_chunked(file_path: str) -> dict:
     """Compute KPIs by processing in chunks to avoid loading full dataset into memory."""
     total_value = 0.0
@@ -604,7 +604,7 @@ def compute_kpis_chunked(file_path: str) -> dict:
         return None
 
 
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=60, max_entries=1)  # Very short TTL
 def load_data():
     """Efficiently load dataset - use lazy loading for large datasets."""
     try:
@@ -615,8 +615,51 @@ def load_data():
         if accurate_kpis is None:
             return None, None
         
-        # Now load the full dataset with optimizations
-        df = load_exports_cleaned(file_path)
+        # CRITICAL: Don't load full dataset - only load a sample for initial display
+        # Load only essential columns and limit rows for memory efficiency
+        try:
+            # Try to load just a sample first to check if file exists and is readable
+            sample_df = pd.read_csv(file_path, nrows=1000)
+            
+            # Get column names
+            required_cols = ['year', 'month_number', 'value_fob_aud', 'gross_weight_tonnes', 
+                           'country_of_destination', 'product_description', 'state_of_origin',
+                           'port_of_loading', 'mode_of_transport']
+            
+            # Only load columns that exist
+            cols_to_load = [col for col in required_cols if col in sample_df.columns]
+            
+            # Load dataset with row limit for very large files to prevent memory issues
+            # Check file size first
+            import os
+            file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
+            
+            # If file is very large (>100MB), limit rows to prevent memory issues
+            if file_size_mb > 100:
+                max_rows = 500000  # Limit to 500k rows for large files
+                st.warning(f"Large dataset detected ({file_size_mb:.1f}MB). Loading first {max_rows:,} rows for performance.")
+                df = pd.read_csv(file_path, usecols=cols_to_load, nrows=max_rows, low_memory=False)
+            else:
+                # Load full dataset but only essential columns - this saves significant memory
+                df = pd.read_csv(file_path, usecols=cols_to_load, low_memory=False)
+            
+            # Add derived columns if needed
+            if 'date' not in df.columns and 'year' in df.columns and 'month_number' in df.columns:
+                df['date'] = pd.to_datetime(df['year'].astype(str) + '-' + df['month_number'].astype(str).str.zfill(2) + '-01')
+            if 'value_per_tonne' not in df.columns and 'value_fob_aud' in df.columns and 'gross_weight_tonnes' in df.columns:
+                df['value_per_tonne'] = df['value_fob_aud'] / df['gross_weight_tonnes'].replace(0, np.nan)
+            
+            # Downcast to save memory
+            for col in df.select_dtypes(include=['int64']).columns:
+                df[col] = pd.to_numeric(df[col], downcast='integer')
+            for col in df.select_dtypes(include=['float64']).columns:
+                df[col] = pd.to_numeric(df[col], downcast='float')
+            
+            del sample_df
+            gc.collect()
+        except Exception as e:
+            st.error(f"Error loading data file: {str(e)}")
+            return None, None
         
         gc.collect()
         return df, accurate_kpis
@@ -626,13 +669,29 @@ def load_data():
         st.code(traceback.format_exc())
         return None, None
 
-# Load data with error handling
-try:
-    with st.spinner('Loading data... This may take a moment for the full dataset.'):
-        df, accurate_kpis = load_data()
-except Exception as e:
-    st.error(f"Failed to load data: {str(e)}")
-    st.stop()
+# Initialize session state for data
+if 'df_loaded' not in st.session_state:
+    st.session_state.df_loaded = None
+    st.session_state.accurate_kpis = None
+    st.session_state.data_file_path = None
+
+# Load data with error handling - use session state to avoid reloading
+if st.session_state.df_loaded is None:
+    try:
+        with st.spinner('Loading data... This may take a moment.'):
+            df, accurate_kpis = load_data()
+            if df is not None:
+                st.session_state.df_loaded = df
+                st.session_state.accurate_kpis = accurate_kpis
+            else:
+                st.error("Failed to load data")
+                st.stop()
+    except Exception as e:
+        st.error(f"Failed to load data: {str(e)}")
+        st.stop()
+else:
+    df = st.session_state.df_loaded
+    accurate_kpis = st.session_state.accurate_kpis
 
 if df is not None and accurate_kpis is not None:
     # Helper function to safely execute sections
