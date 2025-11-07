@@ -1282,8 +1282,9 @@ if df is not None and accurate_kpis is not None:
     
     # Use the main dataset for accurate industry analysis (same as other sections)
     
-    # Use the filtered dataset to respect date range selection - avoid copy
-    df_full_industry = df_filtered  # Use view to save memory
+    # Use the filtered dataset to respect date range selection
+    # Need to copy because we'll be adding new columns (prod_descpt_code, sitc_category, industry_category)
+    df_full_industry = df_filtered.copy()
     
     # SITC Code-based Product Categorization - Clean presentation
 
@@ -1755,8 +1756,9 @@ if df is not None and accurate_kpis is not None:
     
     # st.write("**=== VOLUME VS. VALUE ANALYSIS BY PRODUCT (INDUSTRY-IDENTIFIED) ===**")
     
-    # Use filtered dataset for Volume vs Value Analysis - columns already exist (date and value_per_tonne already calculated)
-    df_full_volume_value = df_filtered  # Use view to save memory
+    # Use filtered dataset for Volume vs Value Analysis
+    # Need to copy because we'll be adding new columns (prod_descpt_code, industry_category)
+    df_full_volume_value = df_filtered.copy()
     
     # Add industry category to full dataset
     # Ensure code column exists for this section as well
@@ -2188,11 +2190,14 @@ if df is not None and accurate_kpis is not None:
     st.markdown('<h2 class="section-header">Regional Analysis</h2>', unsafe_allow_html=True)
     
     # Use filtered dataset for accurate regional analysis to respect date range selection
-    df_full = df_filtered  # Use view to save memory
+    # Need to copy because we'll be adding new columns (region)
+    df_full = df_filtered.copy()
     
-    # Add calculated fields to match your notebook
-    df_full['date'] = pd.to_datetime(df_full['year'].astype(str) + '-' + df_full['month_number'].astype(str).str.zfill(2) + '-01')
-    df_full['value_per_tonne'] = df_full['value_fob_aud'] / df_full['gross_weight_tonnes']
+    # Add calculated fields only if they don't already exist (they should from initial load)
+    if 'date' not in df_full.columns:
+        df_full['date'] = pd.to_datetime(df_full['year'].astype(str) + '-' + df_full['month_number'].astype(str).str.zfill(2) + '-01')
+    if 'value_per_tonne' not in df_full.columns:
+        df_full['value_per_tonne'] = df_full['value_fob_aud'] / df_full['gross_weight_tonnes']
     
     # EXACT CODE FROM YOUR NOTEBOOK - Regional Mapping using region_mapping.py
     try:
