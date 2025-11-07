@@ -1785,6 +1785,9 @@ if df is not None and accurate_kpis is not None:
         'industry_category': 'first'  # Get the industry category for each product
     }).round(2)
     
+    # Reset index to make product_description a column (not just an index)
+    product_analysis = product_analysis.reset_index()
+    
     # Calculate additional metrics
     shipment_counts = df_full_volume_value.groupby('product_description').size()
     product_analysis['shipment_count'] = product_analysis['product_description'].map(shipment_counts).fillna(0)
