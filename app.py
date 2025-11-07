@@ -1529,12 +1529,8 @@ if df is not None and accurate_kpis is not None:
     # 4.6. PRODUCT-MARKET ANALYSIS (EXACT from your notebook)
     st.markdown('<h2 class="section-header">Product-Market Analysis</h2>', unsafe_allow_html=True)
     
-    # Use filtered dataset for Product-Market Analysis to respect date range selection
-    df_full_product_market = df_filtered.copy()
-    
-    # Add calculated fields to match your notebook
-    df_full_product_market['date'] = pd.to_datetime(df_full_product_market['year'].astype(str) + '-' + df_full_product_market['month_number'].astype(str).str.zfill(2) + '-01')
-    df_full_product_market['value_per_tonne'] = df_full_product_market['value_fob_aud'] / df_full_product_market['gross_weight_tonnes']
+    # Use filtered dataset for Product-Market Analysis - columns already exist (date and value_per_tonne already calculated)
+    df_full_product_market = df_filtered  # Use view to save memory
     
     # Function to format large numbers with proper suffixes
     def format_number(value):
@@ -1550,7 +1546,7 @@ if df is not None and accurate_kpis is not None:
     
     # Clean presentation - show only visualizations
     
-    # Calculate data for visualizations - process efficiently
+    # Calculate ALL data for visualizations - process efficiently before deleting
     top_products = df_full_product_market.groupby('product_description').agg({
         'value_fob_aud': 'sum',
         'gross_weight_tonnes': 'sum',
@@ -1569,7 +1565,13 @@ if df is not None and accurate_kpis is not None:
     top_countries.columns = ['Total_Value', 'Total_Weight', 'Products_Imported']
     top_countries = top_countries.sort_values('Total_Value', ascending=False).head(15)
     
-    # Clean up df_full_product_market immediately after aggregations
+    # Calculate product diversification BEFORE deleting df_full_product_market
+    country_product_diversity = df_full_product_market.groupby('country_of_destination').agg({
+        'value_fob_aud': 'sum',
+        'product_description': 'nunique'
+    }).round(2).reset_index()
+    
+    # NOW we can safely delete df_full_product_market
     del df_full_product_market
     gc.collect()
     
@@ -1625,10 +1627,7 @@ if df is not None and accurate_kpis is not None:
     
     # 3. PRODUCT DIVERSIFICATION BY COUNTRY (Interactive)
     st.subheader("Product Diversification by Country")
-    country_product_diversity = df_full_product_market.groupby('country_of_destination').agg({
-        'value_fob_aud': 'sum',
-        'product_description': 'nunique'
-    }).round(2).reset_index()
+    # country_product_diversity already calculated above before deleting df_full_product_market
     
     fig3 = px.scatter(country_product_diversity, x='product_description', y='value_fob_aud',
                       size='value_fob_aud',
