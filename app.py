@@ -475,7 +475,7 @@ def ensure_data_file() -> str:
     return cleaned_path
 
 
-@st.cache_data(ttl=300, max_entries=1, show_spinner=False)  # Reduced TTL and max entries
+@st.cache_data(ttl=3600, show_spinner=False)
 def load_exports_cleaned(path: str) -> pd.DataFrame:
     """Load all columns in chunks, add compatibility shims, and downcast numerics to save RAM."""
     # Load in chunks to avoid memory issues with large datasets
@@ -563,7 +563,7 @@ def load_exports_cleaned(path: str) -> pd.DataFrame:
         return pd.DataFrame()  # Return empty dataframe on error
 
 
-@st.cache_data(ttl=300, max_entries=1)  # Reduced TTL and max entries
+@st.cache_data(ttl=600)
 def compute_kpis_chunked(file_path: str) -> dict:
     """Compute KPIs by processing in chunks to avoid loading full dataset into memory."""
     total_value = 0.0
@@ -604,7 +604,7 @@ def compute_kpis_chunked(file_path: str) -> dict:
         return None
 
 
-@st.cache_data(ttl=300, max_entries=1)  # Reduced TTL and max entries for memory
+@st.cache_data(ttl=600)
 def load_data():
     """Efficiently load dataset - use lazy loading for large datasets."""
     try:
@@ -618,7 +618,6 @@ def load_data():
         # Now load the full dataset with optimizations
         df = load_exports_cleaned(file_path)
         
-        # Aggressive memory cleanup
         gc.collect()
         return df, accurate_kpis
     except Exception as e:
@@ -627,24 +626,13 @@ def load_data():
         st.code(traceback.format_exc())
         return None, None
 
-# Initialize session state for data
-if 'df_loaded' not in st.session_state:
-    st.session_state.df_loaded = None
-    st.session_state.accurate_kpis = None
-
-# Load data with error handling - use session state to avoid reloading
-if st.session_state.df_loaded is None:
-    try:
-        with st.spinner('Loading data... This may take a moment for the full dataset.'):
-            df, accurate_kpis = load_data()
-            st.session_state.df_loaded = df
-            st.session_state.accurate_kpis = accurate_kpis
-    except Exception as e:
-        st.error(f"Failed to load data: {str(e)}")
-        st.stop()
-else:
-    df = st.session_state.df_loaded
-    accurate_kpis = st.session_state.accurate_kpis
+# Load data with error handling
+try:
+    with st.spinner('Loading data... This may take a moment for the full dataset.'):
+        df, accurate_kpis = load_data()
+except Exception as e:
+    st.error(f"Failed to load data: {str(e)}")
+    st.stop()
 
 if df is not None and accurate_kpis is not None:
     # Helper function to safely execute sections
@@ -699,22 +687,16 @@ if df is not None and accurate_kpis is not None:
         min_value=min_date
     )
     
-    # Filter data based on date range - use boolean indexing for memory efficiency
+    # Filter data based on date range
     if len(date_range) == 2:
         start_date, end_date = date_range
-        mask = (df['date'].dt.date >= start_date) & (df['date'].dt.date <= end_date)
-        df_filtered = df[mask]
-        del mask  # Free memory
+        df_filtered = df[(df['date'].dt.date >= start_date) & (df['date'].dt.date <= end_date)]
     else:
         df_filtered = df
     
     # Country filter
     st.sidebar.subheader("Country Filter")
-    # Cache unique countries to avoid recomputing
-    if 'all_countries' not in st.session_state:
-        st.session_state.all_countries = ['All Countries'] + sorted(df['country_of_destination'].unique().tolist())
-    all_countries = st.session_state.all_countries
-    
+    all_countries = ['All Countries'] + sorted(df['country_of_destination'].unique().tolist())
     selected_countries = st.sidebar.multiselect(
         "Select Countries",
         options=all_countries,
@@ -722,17 +704,11 @@ if df is not None and accurate_kpis is not None:
     )
     
     if 'All Countries' not in selected_countries and selected_countries:
-        mask = df_filtered['country_of_destination'].isin(selected_countries)
-        df_filtered = df_filtered[mask]
-        del mask  # Free memory
+        df_filtered = df_filtered[df_filtered['country_of_destination'].isin(selected_countries)]
     
     # Product filter
     st.sidebar.subheader("Product Filter")
-    # Cache unique products to avoid recomputing
-    if 'all_products' not in st.session_state:
-        st.session_state.all_products = ['All Products'] + sorted(df['product_description'].unique().tolist())
-    all_products = st.session_state.all_products
-    
+    all_products = ['All Products'] + sorted(df['product_description'].unique().tolist())
     selected_products = st.sidebar.multiselect(
         "Select Products",
         options=all_products,
@@ -740,12 +716,7 @@ if df is not None and accurate_kpis is not None:
     )
     
     if 'All Products' not in selected_products and selected_products:
-        mask = df_filtered['product_description'].isin(selected_products)
-        df_filtered = df_filtered[mask]
-        del mask  # Free memory
-    
-    # Force garbage collection after filtering
-    gc.collect()
+        df_filtered = df_filtered[df_filtered['product_description'].isin(selected_products)]
     
     # Main dashboard content
     
@@ -871,8 +842,8 @@ if df is not None and accurate_kpis is not None:
     try:
         st.markdown('<h2 class="section-header">Time Series Analysis</h2>', unsafe_allow_html=True)
         
-        # Use filtered dataset for time series analysis - avoid copy if possible
-        df_ts_raw = df_filtered  # Use view instead of copy to save memory
+        # Use filtered dataset for time series analysis
+        df_ts_raw = df_filtered.copy()
         
         if df_ts_raw.empty:
             st.warning("No data available for time series analysis.")
@@ -1051,8 +1022,8 @@ if df is not None and accurate_kpis is not None:
     # 3. COUNTRY ANALYSIS (from your notebook Cell 9) - LAZY LOADED
     st.markdown('<h2 class="section-header">Country Analysis</h2>', unsafe_allow_html=True)
     
-    # Use filtered dataset for country analysis - avoid copy
-    df_country = df_filtered  # Use view instead of copy
+    # Use filtered dataset for country analysis
+    df_country = df_filtered.copy()
     
     if not df_country.empty:
         # Top export destinations (exact code from your notebook)
@@ -1115,8 +1086,8 @@ if df is not None and accurate_kpis is not None:
     # 4. PRODUCT ANALYSIS (from your notebook Cell 11) - LAZY LOADED
     st.markdown('<h2 class="section-header">Product Analysis</h2>', unsafe_allow_html=True)
     
-    # Use filtered dataset for product analysis - avoid copy
-    df_product = df_filtered  # Use view instead of copy
+    # Use filtered dataset for product analysis
+    df_product = df_filtered.copy()
     
     if not df_product.empty:
         # Top 20 products by value (exact code from your notebook)
@@ -1191,8 +1162,8 @@ if df is not None and accurate_kpis is not None:
     
     # Use the main dataset for accurate industry analysis (same as other sections)
     
-    # Use the filtered dataset to respect date range selection - avoid copy
-    df_full_industry = df_filtered  # Use view to save memory
+    # Use the filtered dataset to respect date range selection
+    df_full_industry = df_filtered.copy()
     
     # SITC Code-based Product Categorization - Clean presentation
 
@@ -1434,8 +1405,12 @@ if df is not None and accurate_kpis is not None:
     # 4.6. PRODUCT-MARKET ANALYSIS (EXACT from your notebook)
     st.markdown('<h2 class="section-header">Product-Market Analysis</h2>', unsafe_allow_html=True)
     
-    # Use filtered dataset for Product-Market Analysis - columns already exist from load
-    df_full_product_market = df_filtered  # Use view - date and value_per_tonne already calculated
+    # Use filtered dataset for Product-Market Analysis to respect date range selection
+    df_full_product_market = df_filtered.copy()
+    
+    # Add calculated fields to match your notebook
+    df_full_product_market['date'] = pd.to_datetime(df_full_product_market['year'].astype(str) + '-' + df_full_product_market['month_number'].astype(str).str.zfill(2) + '-01')
+    df_full_product_market['value_per_tonne'] = df_full_product_market['value_fob_aud'] / df_full_product_market['gross_weight_tonnes']
     
     # Function to format large numbers with proper suffixes
     def format_number(value):
@@ -1575,8 +1550,12 @@ if df is not None and accurate_kpis is not None:
     # 4.7. TOP 15 PORTS BY TONNAGE (EXACT from your notebook)
     st.markdown('<h2 class="section-header">Top 15 Ports by Tonnage</h2>', unsafe_allow_html=True)
     
-    # Use filtered dataset for Port Analysis - columns already exist
-    df_full_ports = df_filtered  # Use view - date and value_per_tonne already calculated
+    # Use filtered dataset for Port Analysis to respect date range selection
+    df_full_ports = df_filtered.copy()
+    
+    # Add calculated fields to match your notebook
+    df_full_ports['date'] = pd.to_datetime(df_full_ports['year'].astype(str) + '-' + df_full_ports['month_number'].astype(str).str.zfill(2) + '-01')
+    df_full_ports['value_per_tonne'] = df_full_ports['value_fob_aud'] / df_full_ports['gross_weight_tonnes']
     
     # Clean dashboard - no unnecessary text
     
@@ -1648,8 +1627,12 @@ if df is not None and accurate_kpis is not None:
     
     # st.write("**=== VOLUME VS. VALUE ANALYSIS BY PRODUCT (INDUSTRY-IDENTIFIED) ===**")
     
-    # Use filtered dataset for Volume vs Value Analysis - columns already exist
-    df_full_volume_value = df_filtered  # Use view - date and value_per_tonne already calculated
+    # Use filtered dataset for Volume vs Value Analysis to respect date range selection
+    df_full_volume_value = df_filtered.copy()
+    
+    # Add calculated fields to match your notebook
+    df_full_volume_value['date'] = pd.to_datetime(df_full_volume_value['year'].astype(str) + '-' + df_full_volume_value['month_number'].astype(str).str.zfill(2) + '-01')
+    df_full_volume_value['value_per_tonne'] = df_full_volume_value['value_fob_aud'] / df_full_volume_value['gross_weight_tonnes']
     
     # Add industry category to full dataset
     # Ensure code column exists for this section as well
@@ -2072,8 +2055,12 @@ if df is not None and accurate_kpis is not None:
     # 8. REGIONAL ANALYSIS (EXACT from your notebook) - Using FULL dataset
     st.markdown('<h2 class="section-header">Regional Analysis</h2>', unsafe_allow_html=True)
     
-    # Use filtered dataset for accurate regional analysis - columns already exist
-    df_full = df_filtered  # Use view - date and value_per_tonne already calculated
+    # Use filtered dataset for accurate regional analysis to respect date range selection
+    df_full = df_filtered.copy()
+    
+    # Add calculated fields to match your notebook
+    df_full['date'] = pd.to_datetime(df_full['year'].astype(str) + '-' + df_full['month_number'].astype(str).str.zfill(2) + '-01')
+    df_full['value_per_tonne'] = df_full['value_fob_aud'] / df_full['gross_weight_tonnes']
     
     # EXACT CODE FROM YOUR NOTEBOOK - Regional Mapping using region_mapping.py
     try:
