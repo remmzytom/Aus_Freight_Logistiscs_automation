@@ -20,6 +20,7 @@ import sys
 import subprocess
 import logging
 import smtplib
+import time
 from datetime import datetime
 from pathlib import Path
 from email.mime.text import MIMEText
@@ -185,16 +186,42 @@ class SimpleAutomation:
             return False
 
     def update_dashboard(self):
-        """Update the Streamlit dashboard"""
+        """Update the Streamlit dashboard and launch it in the background"""
         logger.info("Updating dashboard...")
         
         try:
-            logger.info("Dashboard updated successfully")
-            logger.info("Dashboard available at: http://localhost:8501")
-            return True
+            # Launch Streamlit in the background
+            logger.info("Launching Streamlit dashboard in the background...")
+            
+            # Use subprocess.Popen to run Streamlit in background (non-blocking)
+            streamlit_process = subprocess.Popen(
+                [sys.executable, "-m", "streamlit", "run", "app.py", "--server.headless", "true"],
+                cwd=str(self.project_dir),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+            )
+            
+            # Give Streamlit a moment to start
+            time.sleep(3)
+            
+            # Check if process is still running (started successfully)
+            if streamlit_process.poll() is None:
+                logger.info("Dashboard launched successfully in the background")
+                logger.info("Dashboard available at: http://localhost:8501")
+                logger.info("Streamlit process is running (PID: {})".format(streamlit_process.pid))
+                return True
+            else:
+                # Process exited immediately - likely an error
+                stdout, stderr = streamlit_process.communicate()
+                logger.error(f"Streamlit failed to start: {stderr.decode() if stderr else 'Unknown error'}")
+                self.steps_failed.append("Dashboard Update")
+                return False
                 
         except Exception as e:
             logger.error(f"Dashboard update error: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
             self.steps_failed.append("Dashboard Update")
             return False
 

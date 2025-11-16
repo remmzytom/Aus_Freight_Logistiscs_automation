@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Monthly Scheduler for Freight Logistics Automation
+Weekly Scheduler for Freight Logistics Automation
 =================================================
 
-This script schedules the automation to run monthly.
+This script schedules the automation to run every Monday morning.
 It can be run as a Windows service or scheduled task.
 
 Usage:
@@ -52,12 +52,12 @@ def main():
     """Main scheduler function"""
     logger.info("Freight Logistics Scheduler Started")
     
-    # Schedule automation to run once per month (on the same day you start this scheduler)
-    schedule.every().month.do(run_automation)
+    # Schedule automation to run every Monday morning at 8:00 AM
+    schedule.every().monday.at("09:00").do(run_automation)
     
     logger.info("Scheduler configured:")
-    logger.info("- Monthly automation: Once per month (on the same day you started this scheduler)")
-    logger.info("- Runs only ONCE per month - no daily tests")
+    logger.info("- Weekly automation: Every Monday morning at 9:00 AM")
+    logger.info("- Next run: " + str(schedule.next_run()))
     logger.info("Press Ctrl+C to stop the scheduler")
     
     try:

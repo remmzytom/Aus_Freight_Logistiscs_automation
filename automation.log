@@ -802,3 +802,123 @@ print(f"Total Weight: {df['gross_weight_tonnes'].sum():,.2f} tonnes")
 2025-11-04 12:17:13,325 - INFO - Duration: 0:17:46.078772
 2025-11-04 12:17:18,466 - INFO - Email sent successfully: Freight Logistics Automation - SUCCESS
 2025-11-04 12:17:18,467 - INFO - Success notification sent
+2025-11-10 13:50:54,441 - INFO - Simple Freight Logistics Automation Started
+2025-11-10 13:50:54,442 - INFO - Project Directory: C:\Cursor AI_projects\Aus_Freight_Logistic
+2025-11-10 13:50:54,442 - INFO - Starting Freight Logistics Automation
+2025-11-10 13:50:54,442 - INFO - Started at: 2025-11-10 13:50:54
+2025-11-10 13:50:54,443 - INFO - Force fresh data download - running extractor...
+2025-11-10 13:50:54,443 - INFO - Collecting fresh data from ABS website...
+2025-11-10 13:51:40,914 - INFO - Data collection completed successfully
+2025-11-10 13:51:40,914 - INFO - Running data cleaning...
+2025-11-10 13:53:39,328 - INFO - Data cleaning completed successfully
+2025-11-10 13:53:39,329 - INFO - Running data analysis...
+2025-11-10 13:55:58,333 - INFO - Data analysis completed successfully
+2025-11-10 13:55:58,333 - INFO - Updating dashboard...
+2025-11-10 13:55:58,333 - INFO - Dashboard updated successfully
+2025-11-10 13:55:58,334 - INFO - Dashboard available at: http://localhost:8501
+2025-11-10 13:55:58,334 - INFO - Automation completed successfully!
+2025-11-10 13:55:58,334 - INFO - Duration: 0:05:03.890901
+2025-11-10 13:56:02,599 - INFO - Email sent successfully: Freight Logistics Automation - SUCCESS
+2025-11-10 13:56:02,599 - INFO - Success notification sent
+2025-11-10 14:11:36,545 - INFO - Simple Freight Logistics Automation Started
+2025-11-10 14:11:36,546 - INFO - Project Directory: C:\Cursor AI_projects\Aus_Freight_Logistic
+2025-11-10 14:11:36,546 - INFO - Starting Freight Logistics Automation
+2025-11-10 14:11:36,546 - INFO - Started at: 2025-11-10 14:11:36
+2025-11-10 14:11:36,546 - INFO - Force fresh data download - running extractor...
+2025-11-10 14:11:36,546 - INFO - Collecting fresh data from ABS website...
+2025-11-10 14:12:24,012 - INFO - Data collection completed successfully
+2025-11-10 14:12:24,013 - INFO - Running data cleaning...
+2025-11-10 14:14:06,880 - INFO - Data cleaning completed successfully
+2025-11-10 14:14:06,880 - INFO - Running data analysis...
+2025-11-10 14:16:29,385 - INFO - Data analysis completed successfully
+2025-11-10 14:16:29,386 - INFO - Updating dashboard...
+2025-11-10 14:16:29,439 - INFO - Dashboard updated successfully
+2025-11-10 14:16:29,447 - INFO - Dashboard available at: http://localhost:8501
+2025-11-10 14:16:29,454 - INFO - Automation completed successfully!
+2025-11-10 14:16:29,455 - INFO - Duration: 0:04:52.907598
+2025-11-10 14:16:33,772 - INFO - Email sent successfully: Freight Logistics Automation - SUCCESS
+2025-11-10 14:16:33,772 - INFO - Success notification sent
+2025-11-15 02:54:15,620 - INFO - Simple Freight Logistics Automation Started
+2025-11-15 02:54:15,620 - INFO - Project Directory: C:\Cursor AI_projects\Aus_Freight_Logistic
+2025-11-15 02:54:15,620 - INFO - Starting Freight Logistics Automation
+2025-11-15 02:54:15,621 - INFO - Started at: 2025-11-15 02:54:15
+2025-11-15 02:54:15,621 - INFO - Force fresh data download - running extractor...
+2025-11-15 02:54:15,621 - INFO - Collecting fresh data from ABS website...
+2025-11-15 02:55:36,393 - INFO - Data collection completed successfully
+2025-11-15 02:55:36,393 - INFO - Running data cleaning...
+2025-11-15 02:59:24,720 - INFO - Data cleaning completed successfully
+2025-11-15 02:59:24,720 - INFO - Running data analysis...
+2025-11-15 03:11:06,673 - INFO - Data analysis completed successfully
+2025-11-15 03:11:06,674 - INFO - Updating dashboard...
+2025-11-15 03:11:06,674 - INFO - Dashboard updated successfully
+2025-11-15 03:11:06,674 - INFO - Dashboard available at: http://localhost:8501
+2025-11-15 03:11:06,675 - INFO - Automation completed successfully!
+2025-11-15 03:11:06,675 - INFO - Duration: 0:16:51.053491
+2025-11-15 03:11:10,942 - INFO - Email sent successfully: Freight Logistics Automation - SUCCESS
+2025-11-15 03:11:10,942 - INFO - Success notification sent
+2025-11-15 04:09:50,971 - INFO - Simple Freight Logistics Automation Started
+2025-11-15 04:09:50,971 - INFO - Project Directory: C:\Cursor AI_projects\Aus_Freight_Logistic
+2025-11-15 04:09:50,973 - INFO - Starting Freight Logistics Automation
+2025-11-15 04:09:50,973 - INFO - Started at: 2025-11-15 04:09:50
+2025-11-15 04:09:50,973 - INFO - Force fresh data download - running extractor...
+2025-11-15 04:09:50,973 - INFO - Collecting fresh data from ABS website...
+2025-11-15 04:10:55,637 - INFO - Data collection completed successfully
+2025-11-15 04:10:55,637 - INFO - Running data cleaning...
+2025-11-15 04:13:02,749 - INFO - Data cleaning completed successfully
+2025-11-15 04:13:02,750 - INFO - Running data analysis...
+2025-11-15 04:17:32,111 - INFO - Data analysis completed successfully
+2025-11-15 04:17:32,112 - INFO - Updating dashboard...
+2025-11-15 04:17:32,113 - INFO - Launching Streamlit dashboard in the background...
+2025-11-15 04:17:35,122 - INFO - Dashboard launched successfully in the background
+2025-11-15 04:17:35,122 - INFO - Dashboard available at: http://localhost:8501
+2025-11-15 04:17:35,123 - INFO - Streamlit process is running (PID: 7340)
+2025-11-15 04:17:35,128 - INFO - Automation completed successfully!
+2025-11-15 04:17:35,129 - INFO - Duration: 0:07:44.155526
+2025-11-15 04:17:39,285 - INFO - Email sent successfully: Freight Logistics Automation - SUCCESS
+2025-11-15 04:17:39,285 - INFO - Success notification sent
+2025-11-15 05:42:20,162 - INFO - Simple Freight Logistics Automation Started
+2025-11-15 05:42:20,164 - INFO - Project Directory: C:\Cursor AI_projects\Aus_Freight_Logistic
+2025-11-15 05:42:20,164 - INFO - Starting Freight Logistics Automation
+2025-11-15 05:42:20,164 - INFO - Started at: 2025-11-15 05:42:20
+2025-11-15 05:42:20,164 - INFO - Force fresh data download - running extractor...
+2025-11-15 05:42:20,164 - INFO - Collecting fresh data from ABS website...
+2025-11-15 05:43:21,907 - INFO - Data collection completed successfully
+2025-11-15 05:43:21,907 - INFO - Running data cleaning...
+2025-11-15 05:45:14,902 - INFO - Data cleaning completed successfully
+2025-11-15 05:45:14,902 - INFO - Running data analysis...
+2025-11-15 05:45:39,819 - INFO - Data analysis completed successfully
+2025-11-15 05:45:39,819 - INFO - Updating dashboard...
+2025-11-15 05:45:39,819 - INFO - Launching Streamlit dashboard in the background...
+2025-11-15 05:45:42,827 - INFO - Dashboard launched successfully in the background
+2025-11-15 05:45:42,827 - INFO - Dashboard available at: http://localhost:8501
+2025-11-15 05:45:42,828 - INFO - Streamlit process is running (PID: 41364)
+2025-11-15 05:45:42,828 - INFO - Automation completed successfully!
+2025-11-15 05:45:42,828 - INFO - Duration: 0:03:22.664034
+2025-11-15 05:45:46,912 - INFO - Email sent successfully: Freight Logistics Automation - SUCCESS
+2025-11-15 05:45:46,912 - INFO - Success notification sent
+2025-11-17 02:28:18,827 - INFO - Simple Freight Logistics Automation Started
+2025-11-17 02:28:18,828 - INFO - Project Directory: C:\Cursor AI_projects\Aus_Freight_Logistic
+2025-11-17 02:28:18,828 - INFO - Starting Freight Logistics Automation
+2025-11-17 02:28:18,831 - INFO - Started at: 2025-11-17 02:28:18
+2025-11-17 02:28:18,833 - INFO - Force fresh data download - running extractor...
+2025-11-17 02:28:18,835 - INFO - Collecting fresh data from ABS website...
+2025-11-17 02:31:20,809 - INFO - Simple Freight Logistics Automation Started
+2025-11-17 02:31:20,810 - INFO - Project Directory: C:\Cursor AI_projects\Aus_Freight_Logistic
+2025-11-17 02:31:20,810 - INFO - Starting Freight Logistics Automation
+2025-11-17 02:31:20,810 - INFO - Started at: 2025-11-17 02:31:20
+2025-11-17 02:31:20,810 - INFO - Force fresh data download - running extractor...
+2025-11-17 02:31:20,810 - INFO - Collecting fresh data from ABS website...
+2025-11-17 02:33:40,305 - INFO - Data collection completed successfully
+2025-11-17 02:33:40,305 - INFO - Running data cleaning...
+2025-11-17 02:38:27,022 - INFO - Data cleaning completed successfully
+2025-11-17 02:38:27,022 - INFO - Running data analysis...
+2025-11-17 02:39:16,939 - INFO - Data analysis completed successfully
+2025-11-17 02:39:16,941 - INFO - Updating dashboard...
+2025-11-17 02:39:16,942 - INFO - Launching Streamlit dashboard in the background...
+2025-11-17 02:39:19,963 - INFO - Dashboard launched successfully in the background
+2025-11-17 02:39:19,963 - INFO - Dashboard available at: http://localhost:8501
+2025-11-17 02:39:19,963 - INFO - Streamlit process is running (PID: 32968)
+2025-11-17 02:39:19,965 - INFO - Automation completed successfully!
+2025-11-17 02:39:19,965 - INFO - Duration: 0:07:59.154810
+2025-11-17 02:39:24,448 - INFO - Email sent successfully: Freight Logistics Automation - SUCCESS
+2025-11-17 02:39:24,449 - INFO - Success notification sent

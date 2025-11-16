@@ -659,6 +659,11 @@ else:
     accurate_kpis = st.session_state.accurate_kpis
 
 if df is not None and accurate_kpis is not None:
+    # Replace any residual ABS confidential markers with a clear label
+    df['country_of_destination'] = df['country_of_destination'].replace(
+        'No Country Details', 'Confidential / Not Published'
+    )
+    
     # Helper function to safely execute sections
     def safe_execute(func, section_name):
         """Execute a function with error handling to prevent crashes."""
@@ -1040,12 +1045,12 @@ if df is not None and accurate_kpis is not None:
                         st.warning("No data available for the selected date range. Please adjust your date filter.")
             else:
                 st.warning(f"Missing required columns for time series analysis: {missing_cols}")
-                
-                # Clean up memory after time series section
-                del df_ts_raw
-                if 'monthly' in locals():
-                    del monthly
-                gc.collect()
+            
+            # Clean up memory after time series section
+            del df_ts_raw
+            if 'monthly' in locals():
+                del monthly
+            gc.collect()
     except Exception as e:
         st.error(f"Error in Time Series Analysis: {str(e)}")
         import traceback
@@ -1133,7 +1138,9 @@ if df is not None and accurate_kpis is not None:
     df_product = df_filtered  # Use view to save memory
     
     if not df_product.empty:
-        # Top 20 products by value - process efficiently
+        TOP_PRODUCT_COUNT = 15  # Number of top products to display
+        
+        # Top products by value - process efficiently
         top_products = df_product.groupby('product_description').agg({
             'value_fob_aud': 'sum',
             'gross_weight_tonnes': 'sum'
@@ -1150,33 +1157,33 @@ if df is not None and accurate_kpis is not None:
 
         # Check if we have data for the selected date range
         if len(top_products) > 0:
-            # Get top 20 with FULL product names (no truncation)
-            top_20_display = top_products.head(20).copy()
-            top_20_display['Product'] = top_20_display.index  # Full product name
+            # Get top products with FULL product names (no truncation)
+            top_display = top_products.head(TOP_PRODUCT_COUNT).copy()
+            top_display['Product'] = top_display.index  # Full product name
 
             # Reset index and add rank
-            top_20_display = top_20_display.reset_index(drop=True)
-            if len(top_20_display) > 0:
-                top_20_display.index = range(1, min(21, len(top_20_display) + 1))
-                top_20_display.index.name = 'Rank'
+            top_display = top_display.reset_index(drop=True)
+            if len(top_display) > 0:
+                top_display.index = range(1, min(TOP_PRODUCT_COUNT + 1, len(top_display) + 1))
+                top_display.index.name = 'Rank'
             
             # Create final display DataFrame
-            products_df = top_20_display[['Product', 'Value ($B)', 'Weight (M Tonnes)', '% Total']].copy()
+            products_df = top_display[['Product', 'Value ($B)', 'Weight (M Tonnes)', '% Total']].copy()
             
             # Display summary
-            st.subheader("Top 20 Products by Export Value")
+            st.subheader(f"Top {TOP_PRODUCT_COUNT} Products by Export Value")
             
             # Interactive Product Visualization with Value Labels (No Percentage)
-            top_20_products = top_products.head(20).reset_index()
+            top_products_chart = top_products.head(TOP_PRODUCT_COUNT).reset_index()
             
-            fig = px.bar(top_20_products, x='value_fob_aud', y='product_description',
+            fig = px.bar(top_products_chart, x='value_fob_aud', y='product_description',
                          orientation='h',
-                         title='Top 20 Products by Export Value',
+                         title=f'Top {TOP_PRODUCT_COUNT} Products by Export Value',
                          labels={'value_fob_aud': 'Export Value (AUD)', 'product_description': 'Product'},
                          color='value_fob_aud',
                          color_continuous_scale='Blues')
             fig.update_traces(
-                text=[f"${value/1e9:.1f}B" for value in top_20_products['value_fob_aud']],
+                text=[f"${value/1e9:.1f}B" for value in top_products_chart['value_fob_aud']],
                 textposition='outside',
                 textfont=dict(size=9, color='#2c3e50'),
                 hovertemplate='<b>%{y}</b><br>Export Value: $%{x:,.0f}<extra></extra>'
@@ -1199,7 +1206,7 @@ if df is not None and accurate_kpis is not None:
             st.warning("No data available for the selected date range. Please adjust your date filter.")
         
         # Clean up memory after product analysis
-        del top_products, top_20_display, top_20_products, products_df, fig
+        del top_products, top_display, top_products_chart, products_df, fig
         gc.collect()
     else:
         st.warning("No data available for product analysis")
@@ -1385,74 +1392,45 @@ if df is not None and accurate_kpis is not None:
     # Reset index to make Industry a regular column for better sorting/filtering
     display_table = display_table.reset_index(drop=True)
     
-    # Apply styling with lighter colors - alternating rows with soft pastel colors
-    def style_table(row):
-        """Apply alternating row colors with lighter pastel shades"""
-        # Soft pastel colors for alternating rows
-        colors = ['#F5F7FA', '#FFFFFF']  # Very light grey-blue and white
-        return [f'background-color: {colors[row.name % 2]}' for _ in row]
+    # Configure column display for responsive and dynamic table
+    column_config = {
+        "Industry": st.column_config.TextColumn(
+            "Industry",
+            help="Industry category name",
+            width="medium"
+        ),
+        "Total Value ($B)": st.column_config.NumberColumn(
+            "Total Value ($B)",
+            help="Total export value in billions of dollars",
+            format="%.2f",
+            width="small"
+        ),
+        "Market Share (%)": st.column_config.NumberColumn(
+            "Market Share (%)",
+            help="Percentage of total export value",
+            format="%.1f",
+            width="small"
+        ),
+        "Shipments (K)": st.column_config.NumberColumn(
+            "Shipments (K)",
+            help="Number of shipments in thousands",
+            format="%.0f",
+            width="small"
+        ),
+        "Avg Value/Shipment ($K)": st.column_config.NumberColumn(
+            "Avg Value/Shipment ($K)",
+            help="Average value per shipment in thousands of dollars",
+            format="%.0f",
+            width="small"
+        )
+    }
     
-    # Style the table with lighter pastel colors
-    styled_table = display_table.style.apply(style_table, axis=1).format({
-        'Total Value ($B)': '{:.2f}',
-        'Market Share (%)': '{:.1f}',
-        'Shipments (K)': '{:.0f}',
-        'Avg Value/Shipment ($K)': '{:.0f}'
-    }).background_gradient(
-        subset=['Total Value ($B)'],
-        cmap='Blues',
-        vmin=display_table['Total Value ($B)'].min(),
-        vmax=display_table['Total Value ($B)'].max()
-    ).set_table_styles([
-        {
-            'selector': 'thead th',
-            'props': [
-                ('background-color', '#E8F4F8'),  # Very light blue header
-                ('color', '#2C5282'),  # Soft blue text
-                ('font-weight', '600'),
-                ('text-align', 'center'),
-                ('padding', '12px 8px'),
-                ('border-bottom', '2px solid #BEE3F8'),
-                ('font-size', '14px')
-            ]
-        },
-        {
-            'selector': 'tbody tr:hover',
-            'props': [
-                ('background-color', '#E0F2FE'),  # Very light cyan on hover
-            ]
-        },
-        {
-            'selector': 'td',
-            'props': [
-                ('padding', '10px 8px'),
-                ('text-align', 'center'),
-                ('border-bottom', '1px solid #E2E8F0'),  # Light grey border
-                ('font-size', '13px')
-            ]
-        },
-        {
-            'selector': 'tbody tr:nth-of-type(even)',
-            'props': [
-                ('background-color', '#F7FAFC')  # Very light grey-blue for even rows
-            ]
-        },
-        {
-            'selector': 'tbody tr:nth-of-type(odd)',
-            'props': [
-                ('background-color', '#FFFFFF')  # Pure white for odd rows
-            ]
-        }
-    ]).set_properties(**{
-        'font-size': '13px',
-        'font-family': 'Segoe UI, Arial, sans-serif'
-    })
-    
-    # Display styled table using Streamlit
+    # Display interactive table with sorting, filtering, and responsive design
     st.dataframe(
-        styled_table,
+        display_table,
         use_container_width=True,
-        hide_index=True
+        hide_index=True,
+        column_config=column_config
     )
     
     # Clean dashboard - no unnecessary text
@@ -1738,36 +1716,34 @@ if df is not None and accurate_kpis is not None:
     product_analysis['value_percentile'] = product_analysis['value_fob_aud'].rank(pct=True) * 100
     product_analysis['shipment_count_percentile'] = product_analysis['shipment_count'].rank(pct=True) * 100
     
-    # Classify products based on volume vs value (removed medium category)
+    # Classify products based on volume vs value (only High Volume-High Value and Low Volume-High Value)
     def classify_product(row):
         volume_pct = row['volume_percentile']
         value_pct = row['value_percentile']
         
         if volume_pct >= 70 and value_pct >= 70:
             return 'High Volume - High Value'
-        elif volume_pct >= 70 and value_pct <= 30:
-            return 'High Volume - Low Value'
         elif volume_pct <= 30 and value_pct >= 70:
             return 'Low Volume - High Value'
-        else:  # volume_pct <= 30 and value_pct <= 30
-            return 'Low Volume - Low Value'
+        else:
+            # Filter out High Volume-Low Value and Low Volume-Low Value
+            return None
     
     product_analysis['volume_value_category'] = product_analysis.apply(classify_product, axis=1)
     
+    # Filter out None categories (High Volume-Low Value and Low Volume-Low Value)
+    product_analysis = product_analysis[product_analysis['volume_value_category'].notna()].copy()
+    
     # Focus on interesting categories
-    high_volume_low_value = product_analysis[product_analysis['volume_value_category'] == 'High Volume - Low Value'].head(10)
     low_volume_high_value = product_analysis[product_analysis['volume_value_category'] == 'Low Volume - High Value'].head(10)
     high_volume_high_value = product_analysis[product_analysis['volume_value_category'] == 'High Volume - High Value'].head(10)
-    low_volume_low_value = product_analysis[product_analysis['volume_value_category'] == 'Low Volume - Low Value'].head(10)
     
     # Clean presentation - show only visualizations
     
-    # Define strategic categories with descriptive titles and colors
+    # Define strategic categories with descriptive titles and colors (only two categories)
     categories = {
         'High Volume - High Value': ('#2E8B57', 'High Volume - High Value (Market Leaders)'),
-        'High Volume - Low Value': ('#DC143C', 'High Volume - Low Value (Market Opportunities)'),
-        'Low Volume - High Value': ('#4169E1', 'Low Volume - High Value (Premium Products)'),
-        'Low Volume - Low Value': ('#FF8C00', 'Low Volume - Low Value (Niche Markets)')
+        'Low Volume - High Value': ('#4169E1', 'Low Volume - High Value (Premium Products)')
     }
     
     # Create individual interactive charts for each strategic category
@@ -2347,7 +2323,126 @@ if df is not None and accurate_kpis is not None:
         import traceback
         st.code(traceback.format_exc())
     
-    # 10. EXECUTIVE SUMMARY (from your notebook Cell 22)
+    # 10. YEAR-OVER-YEAR GROWTH ANALYSIS (YEAR TO DATE)
+    try:
+        st.markdown('<h2 class="section-header">Year-over-Year Growth Analysis (Year to Date)</h2>', unsafe_allow_html=True)
+        
+        # Use filtered dataset for whole year analysis
+        if 'year' in df_filtered.columns and 'country_of_destination' in df_filtered.columns:
+            # Ensure year is numeric for proper grouping
+            df_yoy = df_filtered.copy()
+            df_yoy['year'] = pd.to_numeric(df_yoy['year'], errors='coerce')
+            
+            # Calculate export values by country and year (whole year, not just Q1)
+            country_yearly = df_yoy.groupby(['country_of_destination', 'year'])['value_fob_aud'].sum().unstack(fill_value=0)
+            
+            # Convert year columns to numeric if they're strings
+            country_yearly.columns = pd.to_numeric(country_yearly.columns, errors='coerce')
+            
+            # Calculate YoY growth
+            if 2024 in country_yearly.columns and 2025 in country_yearly.columns:
+                # Handle division by zero - remove countries with zero 2024 value
+                country_yearly = country_yearly[country_yearly[2024] > 0].copy()
+                
+                country_yearly['YoY_Growth_%'] = ((country_yearly[2025] - country_yearly[2024]) / country_yearly[2024] * 100).round(2)
+                country_yearly['YoY_Growth_Absolute'] = (country_yearly[2025] - country_yearly[2024]) / 1e9  # in billions
+                country_yearly['Value_2024'] = country_yearly[2024] / 1e9  # in billions
+                country_yearly['Value_2025'] = country_yearly[2025] / 1e9  # in billions
+                
+                # Filter countries with significant trade volume (at least $1B in 2024)
+                significant_countries = country_yearly[country_yearly[2024] >= 1e9].copy()  # $1B threshold
+                
+                if len(significant_countries) > 0:
+                    # Sort by YoY growth
+                    significant_countries = significant_countries.sort_values('YoY_Growth_%', ascending=False)
+                    
+                    # Prepare data for top 10 growing markets
+                    top_growing = significant_countries.head(10).reset_index()
+                    top_growing = top_growing.sort_values('YoY_Growth_%', ascending=True)  # Sort ascending for horizontal bar chart
+                    
+                    # Prepare data for top 10 declining markets
+                    top_declining = significant_countries.tail(10).reset_index()
+                    top_declining = top_declining.sort_values('YoY_Growth_%', ascending=True)  # Sort ascending for horizontal bar chart
+                    
+                    # Chart 1: Top 10 Growing Markets (Whole Year)
+                    fig1 = px.bar(
+                        top_growing, 
+                        x='YoY_Growth_%', 
+                        y='country_of_destination',
+                        orientation='h',
+                        title='Top 10 Growing Markets (2024 → 2025)<br><sub>Year to Date</sub>',
+                        labels={'YoY_Growth_%': 'YoY Growth (%)', 'country_of_destination': 'Country'},
+                        color='YoY_Growth_%',
+                        color_continuous_scale='Greens',
+                        text=[f"{value:.1f}%" for value in top_growing['YoY_Growth_%']]
+                    )
+                    fig1.update_layout(
+                        title_font_size=16,
+                        title_font_color='#2c3e50',
+                        xaxis_title_font_size=14,
+                        yaxis_title_font_size=12,
+                        template='plotly_white',
+                        height=600,
+                        showlegend=False,
+                        margin=dict(l=10, r=10, t=80, b=10)
+                    )
+                    fig1.update_yaxes(autorange="reversed")
+                    fig1.add_vline(x=0, line_dash="dash", line_color="black", opacity=0.3)
+                    fig1.update_traces(
+                        textposition='outside',
+                        textfont=dict(size=10, color='#2c3e50'),
+                        hovertemplate='<b>%{y}</b><br>YoY Growth: %{x:.1f}%<br>2024: $%{customdata[2]:.2f}B<br>2025: $%{customdata[3]:.2f}B<br>Change: $%{customdata[1]:.2f}B<extra></extra>',
+                        customdata=top_growing[['YoY_Growth_%', 'YoY_Growth_Absolute', 'Value_2024', 'Value_2025']].values
+                    )
+                    st.plotly_chart(fig1, use_container_width=True)
+                    
+                    # Chart 2: Top 10 Declining Markets (Whole Year)
+                    fig2 = px.bar(
+                        top_declining, 
+                        x='YoY_Growth_%', 
+                        y='country_of_destination',
+                        orientation='h',
+                        title='Top 10 Declining Markets (2024 → 2025)<br><sub>Year to Date</sub>',
+                        labels={'YoY_Growth_%': 'YoY Growth (%)', 'country_of_destination': 'Country'},
+                        color='YoY_Growth_%',
+                        color_continuous_scale='Reds',
+                        text=[f"{value:.1f}%" for value in top_declining['YoY_Growth_%']]
+                    )
+                    fig2.update_layout(
+                        title_font_size=16,
+                        title_font_color='#2c3e50',
+                        xaxis_title_font_size=14,
+                        yaxis_title_font_size=12,
+                        template='plotly_white',
+                        height=600,
+                        showlegend=False,
+                        margin=dict(l=10, r=10, t=80, b=10)
+                    )
+                    fig2.update_yaxes(autorange="reversed")
+                    fig2.add_vline(x=0, line_dash="dash", line_color="black", opacity=0.3)
+                    fig2.update_traces(
+                        textposition='outside',
+                        textfont=dict(size=10, color='#2c3e50'),
+                        hovertemplate='<b>%{y}</b><br>YoY Growth: %{x:.1f}%<br>2024: $%{customdata[2]:.2f}B<br>2025: $%{customdata[3]:.2f}B<br>Change: $%{customdata[1]:.2f}B<extra></extra>',
+                        customdata=top_declining[['YoY_Growth_%', 'YoY_Growth_Absolute', 'Value_2024', 'Value_2025']].values
+                    )
+                    st.plotly_chart(fig2, use_container_width=True)
+                    
+                    # Clean up
+                    del df_yoy, country_yearly, significant_countries, top_growing, top_declining
+                    gc.collect()
+                else:
+                    st.warning("No countries meet the significant trade volume threshold ($1B in 2024) for whole year growth analysis.")
+            else:
+                st.warning("Data for both 2024 and 2025 periods is required for YoY growth analysis. Current data may only cover one year.")
+        else:
+            st.warning("Insufficient data available for year to date analysis. Please check your date range filters.")
+    except Exception as e:
+        st.error(f"Error in Year-over-Year Growth Analysis (Year to Date): {str(e)}")
+        import traceback
+        st.code(traceback.format_exc())
+    
+    # 11. EXECUTIVE SUMMARY (from your notebook Cell 22)
     st.markdown('<h2 class="section-header">Executive Summary</h2>', unsafe_allow_html=True)
     
     # Generate executive summary report (from your notebook)

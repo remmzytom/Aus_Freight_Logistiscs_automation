@@ -74,7 +74,9 @@ COUNTRY_MAPPING = {
     'WF': 'Wallis and Futuna', 'WS': 'Samoa', 'YE': 'Yemen', 'YT': 'Mayotte',
     'ZA': 'South Africa', 'ZM': 'Zambia', 'ZW': 'Zimbabwe',
     # Common abbreviations and special cases
-    'NCD': 'No Country Details',  # Missing country details
+    'NCD': 'Confidential / Not Published',  # ABS confidential destination
+    '999999': 'Confidential / Not Published',  # ABS confidential code
+    '999': 'Confidential / Not Published',  # ABS confidential code
     'CHIN': 'China',  # China abbreviation
     'VIE': 'Viet Nam',  # Vietnam abbreviation
     'FRAN': 'France',  # France abbreviation
@@ -151,6 +153,10 @@ def map_country_code_to_name(country_code):
     # Try exact match first
     if country_str in COUNTRY_MAPPING:
         return COUNTRY_MAPPING[country_str]
+    
+    # Handle ABS confidential codes (often numeric)
+    if country_str in {'999999', '999'}:
+        return 'Confidential / Not Published'
     
     # If not found, return a more meaningful name instead of "Country Code XXX"
     # This prevents creating "Country Code XXX" entries that cause regional mapping issues
