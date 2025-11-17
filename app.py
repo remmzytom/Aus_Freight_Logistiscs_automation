@@ -314,14 +314,14 @@ def ensure_data_file() -> str:
         if file_age_days <= 10:
             try:
                 import pandas as pd
-                sample_df = pd.read_csv(cleaned_csv_path, nrows=1)
+                sample_df = pd.read_csv(cleaned_csv_path, nrows=1, encoding='utf-8', errors='replace')
                 required_cols = ['month_number', 'year', 'value_fob_aud', 'gross_weight_tonnes']
                 if all(col in sample_df.columns for col in required_cols):
                     # Convert CSV to Parquet for future use (much smaller, faster)
                     try:
-                        df_temp = pd.read_csv(cleaned_csv_path)
+                        df_temp = pd.read_csv(cleaned_csv_path, encoding='utf-8', errors='replace')
                         df_temp.to_parquet(cleaned_parquet_path, index=False, compression='snappy')
-                        st.info("✅ Converted CSV to Parquet format (4-10x smaller, loads faster)")
+                        st.info("Converted CSV to Parquet format (4-10x smaller, loads faster)")
                         return cleaned_parquet_path
                     except Exception:
                         # If Parquet conversion fails, use CSV
@@ -358,7 +358,7 @@ def ensure_data_file() -> str:
         raw_path = 'data/exports_2024_2025.csv'
         if os.path.exists(raw_path):
             import pandas as pd
-            df = pd.read_csv(raw_path)
+            df = pd.read_csv(raw_path, encoding='utf-8', errors='replace')
 
     if df is None:
         raise FileNotFoundError("No data available and automatic download failed")
@@ -586,7 +586,7 @@ def load_exports_cleaned(path: str) -> pd.DataFrame:
                 is_parquet = False
         
         if not is_parquet:
-            for chunk in pd.read_csv(path, chunksize=chunk_size):
+            for chunk in pd.read_csv(path, chunksize=chunk_size, encoding='utf-8', errors='replace'):
                 chunk = _process_chunk(chunk)
                 chunks.append(chunk)
                 if len(chunks) >= 3:
@@ -621,22 +621,44 @@ def compute_kpis_chunked(file_path: str) -> dict:
     chunk_size = 50000  # Process 50k rows at a time
     
     try:
-        # Process in chunks
-        for chunk in pd.read_csv(file_path, chunksize=chunk_size):
-            if 'value_fob_aud' in chunk.columns:
-                total_value += float(chunk['value_fob_aud'].sum())
-                # Sample values for median (every 100th record to save memory)
-                value_list.extend(chunk['value_fob_aud'].iloc[::100].tolist())
-            if 'gross_weight_tonnes' in chunk.columns:
-                total_weight += float(chunk['gross_weight_tonnes'].sum())
-            total_records += len(chunk)
-            del chunk  # Explicitly delete chunk
-            gc.collect()
+        # Check if file is Parquet or CSV
+        is_parquet = file_path.endswith('.parquet')
+        
+        if is_parquet:
+            # Read Parquet file in chunks
+            df_full = pd.read_parquet(file_path)
+            # Process in chunks
+            for i in range(0, len(df_full), chunk_size):
+                chunk = df_full.iloc[i:i+chunk_size]
+                if 'value_fob_aud' in chunk.columns:
+                    total_value += float(chunk['value_fob_aud'].sum())
+                    value_list.extend(chunk['value_fob_aud'].iloc[::100].tolist())
+                if 'gross_weight_tonnes' in chunk.columns:
+                    total_weight += float(chunk['gross_weight_tonnes'].sum())
+                total_records += len(chunk)
+        else:
+            # Read CSV with encoding handling to prevent UTF-8 errors
+            for chunk in pd.read_csv(file_path, chunksize=chunk_size, encoding='utf-8', errors='replace'):
+                if 'value_fob_aud' in chunk.columns:
+                    total_value += float(chunk['value_fob_aud'].sum())
+                    # Sample values for median (every 100th record to save memory)
+                    value_list.extend(chunk['value_fob_aud'].iloc[::100].tolist())
+                if 'gross_weight_tonnes' in chunk.columns:
+                    total_weight += float(chunk['gross_weight_tonnes'].sum())
+                total_records += len(chunk)
+                del chunk  # Explicitly delete chunk
+                try:
+                    gc.collect()
+                except Exception:
+                    pass
         
         # Calculate median from sampled values
         median_val = float(pd.Series(value_list).median()) if value_list else 0.0
         del value_list
-        gc.collect()
+        try:
+            gc.collect()
+        except Exception:
+            pass
         
         return {
             'total_value': total_value,
