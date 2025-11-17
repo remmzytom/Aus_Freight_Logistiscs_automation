@@ -659,1842 +659,1853 @@ else:
     accurate_kpis = st.session_state.accurate_kpis
 
 if df is not None and accurate_kpis is not None:
-    # Replace any residual ABS confidential markers with a clear label
-    df['country_of_destination'] = df['country_of_destination'].replace(
-        'No Country Details', 'Confidential / Not Published'
-    )
+    try:
+        # Replace any residual ABS confidential markers with a clear label
+        if 'country_of_destination' in df.columns:
+            df['country_of_destination'] = df['country_of_destination'].replace(
+                'No Country Details', 'Confidential / Not Published'
+            )
+        
+        # Helper function to safely execute sections
+        def safe_execute(func, section_name):
+            """Execute a function with error handling to prevent crashes."""
+            try:
+                func()
+                gc.collect()  # Clean up after each section
+            except Exception as e:
+                st.error(f"Error in {section_name}: {str(e)}")
+                import traceback
+                st.code(traceback.format_exc())
+        
+        # Final compatibility guard: ensure 'product_description' exists even if cached data is old
+        if 'product_description' not in df.columns:
+            import re
+            def _norm(s: str) -> str:
+                return re.sub(r"[^a-z0-9]", "", str(s).lower())
+            candidates = ['product_description', 'product description', 'product', 'sitc', 'commodity', 'sitc description', 'sitc_description']
+            norm_to_col = { _norm(c): c for c in df.columns }
+            src = None
+            for cand in candidates:
+                key = _norm(cand)
+                if key in norm_to_col:
+                    src = norm_to_col[key]
+                    break
+            if src:
+                df['product_description'] = df[src].astype(str)
+            else:
+                df['product_description'] = 'All Products'
+        # Clean presentation - no status messages
+        
+        # Sidebar controls
+        st.sidebar.header("Dashboard Controls")
     
-    # Helper function to safely execute sections
-    def safe_execute(func, section_name):
-        """Execute a function with error handling to prevent crashes."""
+        # Cache clear button (moved after data loading mode)
+        if st.sidebar.button("Clear Cache & Reload Data", help="Clear cached data and force fresh data reload"):
+            st.cache_data.clear()
+            st.success("Cache cleared! Refreshing...")
+            st.rerun()
+    
+        st.sidebar.markdown("---")
+    
+        # Date range filter
+        st.sidebar.subheader("Date Range")
+        min_date = df['date'].min().date()
+        max_date = df['date'].max().date()
+    
+        date_range = st.sidebar.date_input(
+            "Select Date Range",
+            value=(min_date, max_date),
+            min_value=min_date
+        )
+    
+        # Filter data based on date range
+        if len(date_range) == 2:
+            start_date, end_date = date_range
+            df_filtered = df[(df['date'].dt.date >= start_date) & (df['date'].dt.date <= end_date)]
+        else:
+            df_filtered = df
+    
+        # Country filter
+        st.sidebar.subheader("Country Filter")
+        all_countries = ['All Countries'] + sorted(df['country_of_destination'].unique().tolist())
+        selected_countries = st.sidebar.multiselect(
+            "Select Countries",
+            options=all_countries,
+            default=['All Countries']
+        )
+    
+        if 'All Countries' not in selected_countries and selected_countries:
+            df_filtered = df_filtered[df_filtered['country_of_destination'].isin(selected_countries)]
+    
+        # Product filter
+        st.sidebar.subheader("Product Filter")
+        all_products = ['All Products'] + sorted(df['product_description'].unique().tolist())
+        selected_products = st.sidebar.multiselect(
+            "Select Products",
+            options=all_products,
+            default=['All Products']
+        )
+    
+        if 'All Products' not in selected_products and selected_products:
+            df_filtered = df_filtered[df_filtered['product_description'].isin(selected_products)]
+    
+        # Main dashboard content
+    
+        # 1. DATASET SUMMARY (from your notebook Cell 4)
+        st.markdown('<h2 class="section-header">Dataset Summary</h2>', unsafe_allow_html=True)
+    
+        col1, col2, col3, col4 = st.columns(4)
+    
+        with col1:
+            st.markdown(f"""
+            <div class="metric-card">
+                <h3>Total Records</h3>
+                <h2>{len(df_filtered):,}</h2>
+                <p>Individual Shipments</p>
+            </div>
+            """, unsafe_allow_html=True)
+    
+        with col2:
+            st.markdown(f"""
+            <div class="metric-card">
+                <h3>Countries</h3>
+                <h2>{df_filtered['country_of_destination'].nunique()}</h2>
+                <p>Export Destinations</p>
+            </div>
+            """, unsafe_allow_html=True)
+    
+        with col3:
+            st.markdown(f"""
+            <div class="metric-card">
+                <h3>Products</h3>
+                <h2>{df_filtered['product_description'].nunique()}</h2>
+                <p>Product Types</p>
+            </div>
+            """, unsafe_allow_html=True)
+    
+        with col4:
+            st.markdown(f"""
+            <div class="metric-card">
+                <h3>States</h3>
+                <h2>{df_filtered['state_of_origin'].nunique()}</h2>
+                <p>Export States</p>
+            </div>
+            """, unsafe_allow_html=True)
+    
+        # Financial Summary (from your notebook Cell 4)
+        st.markdown('<h2 class="section-header">Financial Summary</h2>', unsafe_allow_html=True)
+    
+        col1, col2, col3, col4 = st.columns(4)
+    
+        with col1:
+            # Calculate from filtered dataset to respect date range selection
+            total_value = df_filtered['value_fob_aud'].sum()
+            if total_value >= 1e9:
+                value_display = f"${total_value/1e9:.1f}B"
+            elif total_value >= 1e6:
+                value_display = f"${total_value/1e6:.1f}M"
+            elif total_value >= 1e3:
+                value_display = f"${total_value/1e3:.1f}K"
+            else:
+                value_display = f"${total_value:,.0f}"
+            st.markdown(f"""
+            <div class="metric-card">
+                <h3>Total Export Value</h3>
+                <h2>{value_display}</h2>
+                <p>Australian Dollars </p>
+            </div>
+            """, unsafe_allow_html=True)
+    
+        with col2:
+            # Calculate from filtered dataset to respect date range selection
+            avg_shipment = df_filtered['value_fob_aud'].mean()
+            if avg_shipment >= 1e6:
+                avg_display = f"${avg_shipment/1e6:.1f}M"
+            elif avg_shipment >= 1e3:
+                avg_display = f"${avg_shipment/1e3:.1f}K"
+            else:
+                avg_display = f"${avg_shipment:,.0f}"
+            st.markdown(f"""
+            <div class="metric-card">
+                <h3>Avg Shipment Value</h3>
+                <h2>{avg_display}</h2>
+                <p>Australian Dollars </p>
+            </div>
+            """, unsafe_allow_html=True)
+    
+        with col3:
+            # Calculate from filtered dataset to respect date range selection
+            median_shipment = df_filtered['value_fob_aud'].median()
+            if median_shipment >= 1e6:
+                median_display = f"${median_shipment/1e6:.1f}M"
+            elif median_shipment >= 1e3:
+                median_display = f"${median_shipment/1e3:.1f}K"
+            else:
+                median_display = f"${median_shipment:,.0f}"
+            st.markdown(f"""
+            <div class="metric-card">
+                <h3>Median Shipment</h3>
+                <h2>{median_display}</h2>
+                <p>Australian Dollars </p>
+            </div>
+            """, unsafe_allow_html=True)
+    
+        with col4:
+            # Calculate from filtered dataset to respect date range selection
+            total_weight = df_filtered['gross_weight_tonnes'].sum()
+            if total_weight >= 1e9:
+                weight_display = f"{total_weight/1e9:.1f}B"
+            elif total_weight >= 1e6:
+                weight_display = f"{total_weight/1e6:.1f}M"
+            elif total_weight >= 1e3:
+                weight_display = f"{total_weight/1e3:.1f}K"
+            else:
+                weight_display = f"{total_weight:,.0f}"
+            st.markdown(f"""
+            <div class="metric-card">
+                <h3>Total Weight</h3>
+                <h2>{weight_display}</h2>
+                <p>Tonnes </p>
+            </div>
+            """, unsafe_allow_html=True)
+    
+        # Force cleanup after overview
+        gc.collect()
+    
+        # 2. TIME SERIES ANALYSIS (from your notebook Cell 6) - LAZY LOADED
         try:
-            func()
-            gc.collect()  # Clean up after each section
+            st.markdown('<h2 class="section-header">Time Series Analysis</h2>', unsafe_allow_html=True)
+        
+            # Use filtered dataset for time series analysis - avoid copy
+            df_ts_raw = df_filtered  # Use view to save memory
+        
+            if df_ts_raw.empty:
+                st.warning("No data available for time series analysis.")
+            else:
+                # Check required columns exist
+                required_cols = ['year', 'month_number', 'value_fob_aud', 'gross_weight_tonnes']
+                missing_cols = [col for col in required_cols if col not in df_ts_raw.columns]
+                if not missing_cols:
+                    # Ensure month_number and year are not NaN for grouping - create copy only when needed
+                    mask = df_ts_raw['month_number'].notna() & df_ts_raw['year'].notna()
+                    df_ts = df_ts_raw[mask].copy()  # Only copy filtered subset
+                    del mask
+                    gc.collect()
+                
+                    if len(df_ts) == 0:
+                        st.warning("No valid date data available for time series analysis.")
+                    else:
+                        # Monthly trends - handle month column (may be missing or in different format)
+                        if 'month' in df_ts.columns:
+                            group_cols = ['year', 'month_number', 'month']
+                        else:
+                            # Create month name from month_number if month column is missing
+                            month_names = {1: 'January', 2: 'February', 3: 'March', 4: 'April',
+                                           5: 'May', 6: 'June', 7: 'July', 8: 'August',
+                                           9: 'September', 10: 'October', 11: 'November', 12: 'December'}
+                            df_ts['month'] = df_ts['month_number'].map(month_names).fillna('Unknown')
+                            group_cols = ['year', 'month_number', 'month']
+                    
+                        # Process aggregation efficiently
+                        monthly = df_ts.groupby(group_cols).agg({
+                            'value_fob_aud': 'sum',
+                            'gross_weight_tonnes': 'sum'
+                        }).reset_index().sort_values(['year', 'month_number'])
+                    
+                        # Clean up df_ts immediately after use
+                        del df_ts
+                        gc.collect()
+                    
+                        # Check if we have data for the selected date range
+                        if len(monthly) > 0:
+                            # Safely create period string - extract only month name (remove any year that might be in month column)
+                            # Extract just the month name (first word) to avoid duplicate years
+                            month_names_only = monthly['month'].astype(str).str.split().str[0]  # Get first word only
+                            monthly['period'] = month_names_only + ' ' + monthly['year'].astype(str)
+                            # Handle division by zero and infinite values
+                            monthly['value_per_tonne'] = monthly['value_fob_aud'] / monthly['gross_weight_tonnes'].replace(0, np.nan)
+                            monthly['value_per_tonne'] = monthly['value_per_tonne'].replace([np.inf, -np.inf], np.nan).fillna(0)
+                        
+                            # Ensure all numeric columns are valid
+                            monthly = monthly[monthly['value_fob_aud'].notna() & monthly['gross_weight_tonnes'].notna()]
+                        
+                            if len(monthly) == 0:
+                                st.warning("No valid data after cleaning for time series analysis.")
+                            else:
+                                # Chart 1: Export Value Over Time (Interactive)
+                                st.subheader("Monthly Export Value Trend")
+                            
+                                # Smart formatting for export values
+                                def format_export_value(value):
+                                    if value >= 1e9:
+                                        return f"${value/1e9:.1f}B"
+                                    elif value >= 1e6:
+                                        return f"${value/1e6:.1f}M"
+                                    elif value >= 1e3:
+                                        return f"${value/1e3:.1f}K"
+                                    else:
+                                        return f"${value:,.0f}"
+                            
+                                fig1 = px.line(monthly, x='period', y=monthly['value_fob_aud'] / 1e9,
+                                               title='Monthly Export Value Trend (2024-2025)',
+                                               labels={'y': 'Export Value (Billion AUD)', 'x': 'Month'},
+                                               markers=True)
+                                fig1.update_traces(
+                                    line_color='#2E86AB', 
+                                    line_width=3, 
+                                    marker_size=8,
+                                    mode='lines+markers+text',
+                                    text=[format_export_value(value) for value in monthly['value_fob_aud']],
+                                    textposition='top center'
+                                )
+                                fig1.update_layout(
+                                    title_font_size=16,
+                                    title_font_color='#2c3e50',
+                                    xaxis_title_font_size=14,
+                                    yaxis_title_font_size=14,
+                                    hovermode='x unified',
+                                    template='plotly_white',
+                                    yaxis=dict(tickformat='.1f')
+                                )
+                                fig1.update_xaxes(tickangle=45)
+                                st.plotly_chart(fig1)
+
+                                # Chart 2: Export Weight Over Time (Interactive)
+                                st.subheader("Monthly Export Weight Trend")
+                            
+                                # Smart formatting for weight values
+                                def format_weight_value(value):
+                                    if value >= 1e9:
+                                        return f"{value/1e9:.1f}B"
+                                    elif value >= 1e6:
+                                        return f"{value/1e6:.1f}M"
+                                    elif value >= 1e3:
+                                        return f"{value/1e3:.1f}K"
+                                    else:
+                                        return f"{value:,.0f}"
+                            
+                                fig2 = px.line(monthly, x='period', y=monthly['gross_weight_tonnes'] / 1e6,
+                                               title='Monthly Export Weight Trend (2024-2025)',
+                                               labels={'y': 'Export Weight (Million Tonnes)', 'x': 'Month'},
+                                               markers=True)
+                                fig2.update_traces(
+                                    line_color='#F18F01', 
+                                    line_width=3, 
+                                    marker_size=8,
+                                    marker_symbol='square',
+                                    mode='lines+markers+text',
+                                    text=[format_weight_value(value) for value in monthly['gross_weight_tonnes']],
+                                    textposition='top center'
+                                )
+                                fig2.update_layout(
+                                    title_font_size=16,
+                                    title_font_color='#2c3e50',
+                                    xaxis_title_font_size=14,
+                                    yaxis_title_font_size=14,
+                                    hovermode='x unified',
+                                    template='plotly_white',
+                                    yaxis=dict(tickformat='.1f')
+                                )
+                                fig2.update_xaxes(tickangle=45)
+                                st.plotly_chart(fig2)
+
+                                # Chart 3: Value per Tonne Over Time (Interactive) - KEY METRIC FOR LOGISTICS!
+                                st.subheader("Average Value per Tonne Trend")
+                            
+                                # Smart formatting for value per tonne
+                                def format_value_per_tonne(value):
+                                    if value >= 1e6:
+                                        return f"${value/1e6:.1f}M"
+                                    elif value >= 1e3:
+                                        return f"${value/1e3:.1f}K"
+                                    else:
+                                        return f"${value:,.0f}"
+                            
+                                fig3 = px.line(monthly, x='period', y=monthly['value_per_tonne'],
+                                               title='Average Value per Tonne Trend (2024-2025)',
+                                               labels={'y': 'Value per Tonne (AUD)', 'x': 'Month'},
+                                               markers=True)
+                                fig3.update_traces(
+                                    line_color='#06A77D', 
+                                    line_width=3, 
+                                    marker_size=8,
+                                    marker_symbol='diamond',
+                                    mode='lines+markers+text',
+                                    text=[format_value_per_tonne(value) for value in monthly['value_per_tonne']],
+                                    textposition='top center'
+                                )
+                                fig3.update_layout(
+                                    title_font_size=16,
+                                    title_font_color='#2c3e50',
+                                    xaxis_title_font_size=14,
+                                    yaxis_title_font_size=14,
+                                    hovermode='x unified',
+                                    template='plotly_white',
+                                    yaxis=dict(tickformat=',.0f')
+                                )
+                                fig3.update_xaxes(tickangle=45)
+                                st.plotly_chart(fig3)
+                        else:
+                            st.warning("No data available for the selected date range. Please adjust your date filter.")
+                else:
+                    st.warning(f"Missing required columns for time series analysis: {missing_cols}")
+            
+                # Clean up memory after time series section
+                del df_ts_raw
+                if 'monthly' in locals():
+                    del monthly
+                gc.collect()
         except Exception as e:
-            st.error(f"Error in {section_name}: {str(e)}")
+            st.error(f"Error in Time Series Analysis: {str(e)}")
+            import traceback
+            st.code(traceback.format_exc())
+            gc.collect()
+    
+        # Force cleanup after time series
+        gc.collect()
+    
+        # 3. COUNTRY ANALYSIS (from your notebook Cell 9) - LAZY LOADED
+        st.markdown('<h2 class="section-header">Country Analysis</h2>', unsafe_allow_html=True)
+    
+        # Use filtered dataset for country analysis - avoid copy
+        df_country = df_filtered  # Use view to save memory
+    
+        if not df_country.empty:
+            # Top export destinations - process efficiently
+            top_countries = df_country.groupby('country_of_destination').agg({
+                'value_fob_aud': 'sum',
+                'gross_weight_tonnes': 'sum'
+            }).sort_values('value_fob_aud', ascending=False)
+        
+            # Clean up df_country reference immediately
+            del df_country
+            gc.collect()
+        
+            # Check if we have data for the selected date range
+            if len(top_countries) > 0:
+                top_countries['value_billions'] = top_countries['value_fob_aud'] / 1e9
+                top_countries['pct'] = (top_countries['value_fob_aud'] / top_countries['value_fob_aud'].sum() * 100)
+            
+                # Display top 15 countries
+                # Clean presentation - visualization shows the data
+            
+                # Interactive Visualization with Value Labels (No Percentage)
+                top_15 = top_countries.head(15).reset_index()
+            
+                fig = px.bar(top_15, x='value_billions', y='country_of_destination',
+                             orientation='h',
+                             title='Top 15 Countries by Export Value',
+                             labels={'value_billions': 'Export Value (Billion AUD)', 'country_of_destination': 'Country'},
+                             color='value_billions',
+                             color_continuous_scale='Greens')
+                fig.update_traces(
+                    text=[f"${value:.1f}B" for value in top_15['value_billions']],
+                    textposition='outside'
+                )
+            
+                fig.update_layout(
+                    title_font_size=16,
+                    title_font_color='#2c3e50',
+                    xaxis_title_font_size=14,
+                    yaxis_title_font_size=14,
+                    template='plotly_white',
+                    height=600,
+                    showlegend=False
+                )
+                fig.update_yaxes(autorange="reversed")
+                fig.update_xaxes(tickformat='$,.1f')
+            
+                # Update text positioning and styling
+                fig.update_traces(
+                    textposition='outside',
+                    textfont=dict(size=10, color='#2c3e50'),
+                    hovertemplate='<b>%{y}</b><br>Export Value: $%{x:.1f}B<extra></extra>'
+                )
+            
+                st.plotly_chart(fig)
+            
+                # Clean up memory after country analysis
+                del top_countries, top_15, fig
+                gc.collect()
+            else:
+                st.warning("No data available for the selected date range. Please adjust your date filter.")
+        else:
+            st.warning("No data available for country analysis")
+    
+        # Force cleanup
+        gc.collect()
+    
+        # 4. PRODUCT ANALYSIS (from your notebook Cell 11) - LAZY LOADED
+        st.markdown('<h2 class="section-header">Product Analysis</h2>', unsafe_allow_html=True)
+    
+        # Use filtered dataset for product analysis - avoid copy
+        df_product = df_filtered  # Use view to save memory
+    
+        if not df_product.empty:
+            TOP_PRODUCT_COUNT = 15  # Number of top products to display
+        
+            # Top products by value - process efficiently
+            top_products = df_product.groupby('product_description').agg({
+                'value_fob_aud': 'sum',
+                'gross_weight_tonnes': 'sum'
+            }).sort_values('value_fob_aud', ascending=False)
+        
+            # Clean up df_product reference immediately
+            del df_product
+            gc.collect()
+
+            # Create clean display columns (rounded to 2 decimal places)
+            top_products['Value ($B)'] = (top_products['value_fob_aud'] / 1e9).round(2)
+            top_products['Weight (M Tonnes)'] = (top_products['gross_weight_tonnes'] / 1e6).round(2)
+            top_products['% Total'] = ((top_products['value_fob_aud'] / top_products['value_fob_aud'].sum() * 100)).round(2)
+
+            # Check if we have data for the selected date range
+            if len(top_products) > 0:
+                # Get top products with FULL product names (no truncation)
+                top_display = top_products.head(TOP_PRODUCT_COUNT).copy()
+                top_display['Product'] = top_display.index  # Full product name
+
+                # Reset index and add rank
+                top_display = top_display.reset_index(drop=True)
+                if len(top_display) > 0:
+                    top_display.index = range(1, min(TOP_PRODUCT_COUNT + 1, len(top_display) + 1))
+                    top_display.index.name = 'Rank'
+            
+                # Create final display DataFrame
+                products_df = top_display[['Product', 'Value ($B)', 'Weight (M Tonnes)', '% Total']].copy()
+            
+                # Display summary
+                st.subheader(f"Top {TOP_PRODUCT_COUNT} Products by Export Value")
+            
+                # Interactive Product Visualization with Value Labels (No Percentage)
+                top_products_chart = top_products.head(TOP_PRODUCT_COUNT).reset_index()
+            
+                fig = px.bar(top_products_chart, x='value_fob_aud', y='product_description',
+                             orientation='h',
+                             title=f'Top {TOP_PRODUCT_COUNT} Products by Export Value',
+                             labels={'value_fob_aud': 'Export Value (AUD)', 'product_description': 'Product'},
+                             color='value_fob_aud',
+                             color_continuous_scale='Blues')
+                fig.update_traces(
+                    text=[f"${value/1e9:.1f}B" for value in top_products_chart['value_fob_aud']],
+                    textposition='outside',
+                    textfont=dict(size=9, color='#2c3e50'),
+                    hovertemplate='<b>%{y}</b><br>Export Value: $%{x:,.0f}<extra></extra>'
+                )
+            
+                fig.update_layout(
+                    title_font_size=16,
+                    title_font_color='#2c3e50',
+                    xaxis_title_font_size=14,
+                    yaxis_title_font_size=14,
+                    template='plotly_white',
+                    height=800,
+                    showlegend=False
+                )
+                fig.update_yaxes(autorange="reversed")
+                fig.update_xaxes(tickformat='$,.0f')
+            
+                st.plotly_chart(fig)
+            else:
+                st.warning("No data available for the selected date range. Please adjust your date filter.")
+        
+            # Clean up memory after product analysis
+            del top_products, top_display, top_products_chart, products_df, fig
+            gc.collect()
+        else:
+            st.warning("No data available for product analysis")
+    
+        # Force cleanup
+        gc.collect()
+    
+        # 4.5. INDUSTRY CATEGORY ANALYSIS (EXACT from your notebook) - LAZY LOADED
+        st.markdown('<h2 class="section-header">Industry Category Analysis</h2>', unsafe_allow_html=True)
+    
+        # Use the main dataset for accurate industry analysis (same as other sections)
+    
+        # Use the filtered dataset to respect date range selection
+        # Need to copy because we'll be adding new columns (prod_descpt_code, sitc_category, industry_category)
+        df_full_industry = df_filtered.copy()
+    
+        # SITC Code-based Product Categorization - Clean presentation
+
+        # Ensure the expected code column exists; map from 'sitc_code' when available
+        if 'prod_descpt_code' not in df_full_industry.columns:
+            if 'sitc_code' in df_full_industry.columns:
+                df_full_industry['prod_descpt_code'] = df_full_industry['sitc_code'].astype(str)
+            else:
+                df_full_industry['prod_descpt_code'] = ''
+
+        # Import SITC mapping and create sitc_category column
+        try:
+            from sitc_mapping import SITC_MAPPING
+        
+            def get_sitc_section(sitc_code):
+                if pd.isna(sitc_code) or sitc_code == '':
+                    return 'Other Commodities'
+                sitc_str = str(sitc_code).strip()
+                if len(sitc_str) >= 2:
+                    section_code = sitc_str[:2]
+                    return SITC_MAPPING.get(section_code, 'Other Commodities')
+                return 'Other Commodities'
+        
+            df_full_industry['sitc_category'] = df_full_industry['prod_descpt_code'].apply(get_sitc_section)
+            # Clean dashboard - no unnecessary text
+        except ImportError:
+            st.warning("SITC mapping module not found, using fallback categorization")
+            df_full_industry['sitc_category'] = 'Other Commodities'
+    
+        # Create Stakeholder-Friendly Industry Categories (EXACT from your notebook)
+        # Clean dashboard - no unnecessary text
+    
+        # Map SITC code to industry category using first digit
+        def get_industry_category(sitc_code):
+            if pd.isna(sitc_code) or sitc_code == '':
+                return 'Other Commodities'
+            first_digit = str(sitc_code).strip()[0] if len(str(sitc_code).strip()) >= 1 else '9'
+            mapping = {'0': 'Food & Agriculture', '1': 'Beverages & Tobacco', '2': 'Raw Materials & Mining', 
+                       '3': 'Energy & Petroleum', '4': 'Food Processing', '5': 'Chemicals & Pharmaceuticals',
+                       '6': 'Manufactured Goods and materials', '7': 'Machinery & Equipment', 
+                       '8': 'Consumer Goods', '9': 'Other Commodities'}
+            return mapping.get(first_digit, 'Other Commodities')
+    
+        df_full_industry['industry_category'] = df_full_industry['prod_descpt_code'].apply(get_industry_category)
+        # Clean dashboard - no unnecessary text
+    
+        # Analyze by industry category - process efficiently
+        industry_analysis = df_full_industry.groupby('industry_category').agg({
+            'value_fob_aud': ['sum', 'count', 'mean'],
+            'gross_weight_tonnes': 'sum',
+            'value_per_tonne': 'mean'
+        }).round(2)
+    
+        # Clean up df_full_industry immediately after aggregation
+        del df_full_industry
+        gc.collect()
+    
+        # Flatten column names
+        industry_analysis.columns = ['Total_Value', 'Shipment_Count', 'Avg_Value', 'Total_Weight', 'Avg_Value_per_Tonne']
+        industry_analysis = industry_analysis.sort_values('Total_Value', ascending=False)
+    
+        # Calculate percentages
+        total_value = industry_analysis['Total_Value'].sum()
+        industry_analysis['Value_Percentage'] = (industry_analysis['Total_Value'] / total_value * 100).round(1)
+    
+        # Clean presentation - show only visualizations
+    
+        # Create individual visualizations (separate charts)
+        plt.rcParams['figure.dpi'] = 80  # Standard DPI for individual charts
+    
+        # Chart 1: Industry Categories by Export Value (Horizontal Bar)
+        st.subheader("Australian Export Value by Industry Category")
+    
+        top_industries = industry_analysis.head(8).reset_index()
+    
+        # Add value labels with percentage
+        fig1 = px.bar(top_industries, x='Total_Value', y='industry_category',
+                      orientation='h',
+                      title='Australian Export Value by Industry Category',
+                      labels={'Total_Value': 'Export Value (AUD)', 'industry_category': 'Industry'},
+                      color='Total_Value',
+                      color_continuous_scale='viridis')
+        fig1.update_traces(
+            text=[f"${value/1e9:.1f}B<br>({pct:.1f}%)" for value, pct in zip(top_industries['Total_Value'], top_industries['Value_Percentage'])],
+            textposition='outside'
+        )
+    
+        fig1.update_layout(
+            title_font_size=16,
+            title_font_color='#2c3e50',
+            xaxis_title_font_size=14,
+            yaxis_title_font_size=14,
+            template='plotly_white',
+            height=600,
+            showlegend=False
+        )
+        fig1.update_yaxes(autorange="reversed")
+        fig1.update_xaxes(tickformat='$,.0f')
+    
+        # Update text positioning and styling
+        fig1.update_traces(
+            textposition='outside',
+            textfont=dict(size=10, color='#2c3e50'),
+            hovertemplate='<b>%{y}</b><br>Export Value: $%{x:,.0f}<br>Percentage: %{customdata:.1f}%<extra></extra>',
+            customdata=top_industries['Value_Percentage']
+        )
+    
+        st.plotly_chart(fig1)
+    
+        # Chart 2: Industry Value Density (Interactive) - EXACT from your notebook
+        st.subheader("Industry Value Density (Value per Tonne Shipped)")
+    
+        # Calculate ratio of totals (Total Value ÷ Total Weight) per industry - CORRECT method
+        industry_analysis['Value_per_Tonne_Ratio'] = industry_analysis['Total_Value'] / industry_analysis['Total_Weight']
+        value_density_industry = industry_analysis.sort_values('Value_per_Tonne_Ratio', ascending=False).reset_index()
+    
+        fig2 = px.bar(value_density_industry, x='industry_category', y='Value_per_Tonne_Ratio',
+                      title='Industry Value Density (Value per Tonne Shipped)',
+                      labels={'Value_per_Tonne_Ratio': 'Value per Tonne (AUD)', 'industry_category': 'Industry'},
+                      color='Value_per_Tonne_Ratio',
+                      color_continuous_scale='viridis')
+        fig2.update_traces(
+            text=[f"${value:,.0f}/tonne" for value in value_density_industry['Value_per_Tonne_Ratio']],
+            textposition='outside'
+        )
+    
+        fig2.update_layout(
+            title_font_size=16,
+            title_font_color='#2c3e50',
+            xaxis_title_font_size=14,
+            yaxis_title_font_size=14,
+            template='plotly_white',
+            height=600,
+            showlegend=False
+        )
+        fig2.update_xaxes(tickangle=45)
+        fig2.update_yaxes(tickformat='$,.0f')
+    
+        # Update text positioning and styling
+        fig2.update_traces(
+            textposition='outside',
+            textfont=dict(size=10, color='#2c3e50'),
+            hovertemplate='<b>%{x}</b><br>Value per Tonne: $%{y:,.0f}<extra></extra>'
+        )
+    
+        st.plotly_chart(fig2)
+    
+        # Chart 3: Dynamic Interactive Performance Summary Table
+        st.subheader("Industry Performance Summary Table")
+    
+        # Create a comprehensive industry performance table (without Value/Tonne) - Dynamic and updates with filters
+        table_data = industry_analysis[['Total_Value', 'Shipment_Count', 'Avg_Value', 'Value_Percentage']].copy()
+    
+        # Format the data for better readability
+        table_data['Total_Value_B'] = (table_data['Total_Value'] / 1e9).round(2)
+        table_data['Avg_Value_K'] = (table_data['Avg_Value'] / 1e3).round(0)
+        table_data['Shipment_Count_K'] = (table_data['Shipment_Count'] / 1e3).round(0)
+    
+        # Create display table with formatted columns (removed Value/Tonne)
+        display_table = pd.DataFrame({
+            'Industry': table_data.index,
+            'Total Value ($B)': table_data['Total_Value_B'],
+            'Market Share (%)': table_data['Value_Percentage'],
+            'Shipments (K)': table_data['Shipment_Count_K'],
+            'Avg Value/Shipment ($K)': table_data['Avg_Value_K']
+        })
+    
+        # Reset index to make Industry a regular column for better sorting/filtering
+        display_table = display_table.reset_index(drop=True)
+    
+        # Configure column display for responsive and dynamic table
+        column_config = {
+            "Industry": st.column_config.TextColumn(
+                "Industry",
+                help="Industry category name",
+                width="medium"
+            ),
+            "Total Value ($B)": st.column_config.NumberColumn(
+                "Total Value ($B)",
+                help="Total export value in billions of dollars",
+                format="%.2f",
+                width="small"
+            ),
+            "Market Share (%)": st.column_config.NumberColumn(
+                "Market Share (%)",
+                help="Percentage of total export value",
+                format="%.1f",
+                width="small"
+            ),
+            "Shipments (K)": st.column_config.NumberColumn(
+                "Shipments (K)",
+                help="Number of shipments in thousands",
+                format="%.0f",
+                width="small"
+            ),
+            "Avg Value/Shipment ($K)": st.column_config.NumberColumn(
+                "Avg Value/Shipment ($K)",
+                help="Average value per shipment in thousands of dollars",
+                format="%.0f",
+                width="small"
+            )
+        }
+    
+        # Display interactive table with sorting, filtering, and responsive design
+        st.dataframe(
+            display_table,
+            width='stretch',
+            hide_index=True,
+            column_config=column_config
+        )
+    
+        # Clean dashboard - no unnecessary text
+    
+        # 4.6. PRODUCT-MARKET ANALYSIS (EXACT from your notebook)
+        st.markdown('<h2 class="section-header">Product-Market Analysis</h2>', unsafe_allow_html=True)
+    
+        # Use filtered dataset for Product-Market Analysis - columns already exist (date and value_per_tonne already calculated)
+        df_full_product_market = df_filtered  # Use view to save memory
+    
+        # Function to format large numbers with proper suffixes
+        def format_number(value):
+            """Format numbers with B, M, K suffixes and appropriate decimal places"""
+            if value >= 1e9:
+                return f"{value/1e9:.2f}B"
+            elif value >= 1e6:
+                return f"{value/1e6:.2f}M"
+            elif value >= 1e3:
+                return f"{value/1e3:.2f}K"
+            else:
+                return f"{value:.2f}"
+    
+        # Clean presentation - show only visualizations
+    
+        # Calculate ALL data for visualizations - process efficiently before deleting
+        top_products = df_full_product_market.groupby('product_description').agg({
+            'value_fob_aud': 'sum',
+            'gross_weight_tonnes': 'sum',
+            'country_of_destination': 'nunique'
+        }).round(2)
+    
+        top_products.columns = ['Total_Value', 'Total_Weight', 'Countries_Served']
+        top_products = top_products.sort_values('Total_Value', ascending=False).head(10)
+    
+        top_countries = df_full_product_market.groupby('country_of_destination').agg({
+            'value_fob_aud': 'sum',
+            'gross_weight_tonnes': 'sum',
+            'product_description': 'nunique'
+        }).round(2)
+    
+        top_countries.columns = ['Total_Value', 'Total_Weight', 'Products_Imported']
+        top_countries = top_countries.sort_values('Total_Value', ascending=False).head(15)
+    
+        # Calculate product diversification BEFORE deleting df_full_product_market
+        country_product_diversity = df_full_product_market.groupby('country_of_destination').agg({
+            'value_fob_aud': 'sum',
+            'product_description': 'nunique'
+        }).round(2).reset_index()
+    
+        # NOW we can safely delete df_full_product_market
+        del df_full_product_market
+        gc.collect()
+    
+        # 4. PRODUCT-MARKET VISUALIZATIONS (Interactive Individual Charts)
+    
+        # 1. TOP PRODUCTS BY EXPORT VALUE (Interactive)
+        st.subheader("Top 10 Export Products by Value")
+        top_10_products = top_products.head(10).reset_index()
+        fig1 = px.bar(top_10_products, x='Total_Value', y='product_description',
+                      orientation='h',
+                      title='TOP 10 EXPORT PRODUCTS BY VALUE',
+                      labels={'Total_Value': 'Export Value (AUD)', 'product_description': 'Product'},
+                      color='Total_Value',
+                      color_continuous_scale='viridis')
+        fig1.update_layout(
+            title_font_size=16,
+            title_font_color='#2c3e50',
+            xaxis_title_font_size=14,
+            yaxis_title_font_size=14,
+            template='plotly_white',
+            height=600
+        )
+        fig1.update_yaxes(autorange="reversed")
+        fig1.update_xaxes(tickformat='$,.0f')
+        st.plotly_chart(fig1)
+    
+        # 2. TOP DESTINATION COUNTRIES (Interactive)
+        st.subheader("Top 10 Destination Countries")
+        top_10_countries = top_countries.head(10).reset_index()
+        fig2 = px.bar(top_10_countries, x='Total_Value', y='country_of_destination',
+                      orientation='h',
+                      title='TOP 10 DESTINATION COUNTRIES',
+                      labels={'Total_Value': 'Import Value (AUD)', 'country_of_destination': 'Country'},
+                      color='Total_Value',
+                      color_continuous_scale='plasma')
+        fig2.update_traces(
+            text=[f"${value/1e9:.1f}B" for value in top_10_countries['Total_Value']],
+            textposition='outside',
+            textfont=dict(size=10, color='#2c3e50'),
+            hovertemplate='<b>%{y}</b><br>Import Value: $%{x:,.0f}<extra></extra>'
+        )
+        fig2.update_layout(
+            title_font_size=16,
+            title_font_color='#2c3e50',
+            xaxis_title_font_size=14,
+            yaxis_title_font_size=14,
+            template='plotly_white',
+            height=600
+        )
+        fig2.update_yaxes(autorange="reversed")
+        fig2.update_xaxes(tickformat='$,.0f')
+        st.plotly_chart(fig2)
+    
+        # 3. PRODUCT DIVERSIFICATION BY COUNTRY (Interactive)
+        st.subheader("Product Diversification by Country")
+        # country_product_diversity already calculated above before deleting df_full_product_market
+    
+        fig3 = px.scatter(country_product_diversity, x='product_description', y='value_fob_aud',
+                          size='value_fob_aud',
+                          color='value_fob_aud',
+                          title='PRODUCT DIVERSIFICATION BY COUNTRY',
+                          labels={'product_description': 'Number of Products Imported', 'value_fob_aud': 'Total Import Value (AUD)'},
+                          hover_name='country_of_destination',
+                          color_continuous_scale='viridis')
+        fig3.update_layout(
+            title_font_size=16,
+            title_font_color='#2c3e50',
+            xaxis_title_font_size=14,
+            yaxis_title_font_size=14,
+            template='plotly_white',
+            height=600
+        )
+        fig3.update_yaxes(tickformat='$,.0f')
+        st.plotly_chart(fig3)
+    
+        # 4. MARKET CONCENTRATION ANALYSIS (Interactive)
+        st.subheader("Market Concentration Analysis")
+        # Top 10 countries market share
+        top_10_share = top_countries.head(10)['Total_Value']
+        others_share = top_countries.iloc[10:]['Total_Value'].sum()
+        market_share_data = list(top_10_share.values) + [others_share]
+        market_share_labels = list(top_10_share.index) + ['Others']
+    
+        market_share_df = pd.DataFrame({
+            'Country': market_share_labels,
+            'Value': market_share_data
+        })
+    
+        fig4 = px.pie(market_share_df, values='Value', names='Country',
+                       title='MARKET CONCENTRATION (Top 10 Countries vs Others)',
+                       color_discrete_sequence=px.colors.qualitative.Set3)
+        fig4.update_layout(
+            title_font_size=16,
+            title_font_color='#2c3e50',
+            template='plotly_white',
+            height=500
+        )
+        fig4.update_traces(textposition='inside', textinfo='percent+label')
+        st.plotly_chart(fig4)
+    
+        # Clean dashboard - no unnecessary text
+    
+        # 4.7. TOP 15 PORTS BY TONNAGE (EXACT from your notebook)
+        st.markdown('<h2 class="section-header">Top 15 Ports by Tonnage</h2>', unsafe_allow_html=True)
+    
+        # Use filtered dataset for Port Analysis - columns already exist (date and value_per_tonne already calculated)
+        df_full_ports = df_filtered  # Use view to save memory
+    
+        # Clean dashboard - no unnecessary text
+    
+        # Group by port of loading and calculate total tonnage
+        port_tonnage = df_full_ports.groupby('port_of_loading')['gross_weight_tonnes'].sum().reset_index()
+    
+        # Clean up df_full_ports immediately after aggregation
+        del df_full_ports
+        gc.collect()
+    
+        port_tonnage = port_tonnage.sort_values('gross_weight_tonnes', ascending=False)
+        port_tonnage['tonnage_millions'] = port_tonnage['gross_weight_tonnes'] / 1e6
+        top_15_ports = port_tonnage.head(15)
+    
+        # Clean dashboard - no unnecessary text
+    
+        # Create interactive lollipop chart
+        fig = go.Figure()
+    
+        # Add horizontal lines (sticks)
+        for i, (_, row) in enumerate(top_15_ports.iterrows()):
+            fig.add_trace(go.Scatter(
+                x=[0, row['tonnage_millions']],
+                y=[i, i],
+                mode='lines',
+                line=dict(color='gray', width=2),
+                showlegend=False,
+                hoverinfo='skip'
+            ))
+    
+        # Add dots (lollipops) at the end of each line
+        fig.add_trace(go.Scatter(
+            x=top_15_ports['tonnage_millions'],
+            y=list(range(len(top_15_ports))),
+            mode='markers',
+            marker=dict(
+                size=15,
+                color=top_15_ports['tonnage_millions'],
+                colorscale='viridis',
+                line=dict(color='black', width=1)
+            ),
+            text=[f"{port}<br>Tonnage: {tonnage:.1f}M tonnes" for port, tonnage in zip(top_15_ports['port_of_loading'], top_15_ports['tonnage_millions'])],
+            hovertemplate='%{text}<extra></extra>',
+            name='Ports'
+        ))
+    
+        # Update layout
+        fig.update_layout(
+            title='TOP 15 PORTS BY TONNAGE',
+            title_font_size=16,
+            title_font_color='#2c3e50',
+            xaxis_title='Tonnage (Million Tonnes)',
+            yaxis_title='Port',
+            xaxis_title_font_size=14,
+            yaxis_title_font_size=14,
+            template='plotly_white',
+            height=600,
+            yaxis=dict(
+                tickmode='array',
+                tickvals=list(range(len(top_15_ports))),
+                ticktext=top_15_ports['port_of_loading'].tolist(),
+                autorange="reversed"
+            ),
+            xaxis=dict(tickformat=',.1f'),
+            showlegend=False
+        )
+    
+        st.plotly_chart(fig)
+    
+        # 4.8. VOLUME VS VALUE ANALYSIS (EXACT from your notebook)
+        st.markdown('<h2 class="section-header">Volume vs Value Analysis</h2>', unsafe_allow_html=True)
+    
+        # Volume vs. Value Analysis by Product (EXACT from your notebook)
+    
+        # st.write("**=== VOLUME VS. VALUE ANALYSIS BY PRODUCT (INDUSTRY-IDENTIFIED) ===**")
+    
+        # Use filtered dataset for Volume vs Value Analysis
+        # Need to copy because we'll be adding new columns (prod_descpt_code, industry_category)
+        df_full_volume_value = df_filtered.copy()
+    
+        # Add industry category to full dataset
+        # Ensure code column exists for this section as well
+        if 'prod_descpt_code' not in df_full_volume_value.columns:
+            if 'sitc_code' in df_full_volume_value.columns:
+                df_full_volume_value['prod_descpt_code'] = df_full_volume_value['sitc_code'].astype(str)
+            else:
+                df_full_volume_value['prod_descpt_code'] = ''
+        def get_industry_category(sitc_code):
+            if pd.isna(sitc_code) or sitc_code == '':
+                return 'Other Commodities'
+            first_digit = str(sitc_code).strip()[0] if len(str(sitc_code).strip()) >= 1 else '9'
+            mapping = {'0': 'Food & Agriculture', '1': 'Beverages & Tobacco', '2': 'Raw Materials & Mining', 
+                       '3': 'Energy & Petroleum', '4': 'Food Processing', '5': 'Chemicals & Pharmaceuticals',
+                       '6': 'Manufactured Goods and materials', '7': 'Machinery & Equipment', 
+                       '8': 'Consumer Goods', '9': 'Other Commodities'}
+            return mapping.get(first_digit, 'Other Commodities')
+    
+        df_full_volume_value['industry_category'] = df_full_volume_value['prod_descpt_code'].apply(get_industry_category)
+    
+        # Calculate volume and value metrics for each product
+        product_analysis = df_full_volume_value.groupby('product_description').agg({
+            'value_fob_aud': 'sum',
+            'gross_weight_tonnes': 'sum',
+            'value_per_tonne': 'mean',
+            'industry_category': 'first'  # Get the industry category for each product
+        }).round(2)
+    
+        # Reset index to make product_description a column (not just an index)
+        product_analysis = product_analysis.reset_index()
+    
+        # Calculate additional metrics
+        shipment_counts = df_full_volume_value.groupby('product_description').size()
+        product_analysis['shipment_count'] = product_analysis['product_description'].map(shipment_counts).fillna(0)
+        product_analysis['avg_shipment_value'] = (product_analysis['value_fob_aud'] / product_analysis['shipment_count']).round(2)
+        product_analysis['avg_shipment_weight'] = (product_analysis['gross_weight_tonnes'] / product_analysis['shipment_count']).round(2)
+    
+        # Clean up df_full_volume_value immediately after aggregations
+        del df_full_volume_value, shipment_counts
+        gc.collect()
+    
+        # Sort by total value
+        product_analysis = product_analysis.sort_values('value_fob_aud', ascending=False)
+    
+        # Create volume and value percentiles for classification
+        product_analysis['volume_percentile'] = product_analysis['gross_weight_tonnes'].rank(pct=True) * 100
+        product_analysis['value_percentile'] = product_analysis['value_fob_aud'].rank(pct=True) * 100
+        product_analysis['shipment_count_percentile'] = product_analysis['shipment_count'].rank(pct=True) * 100
+    
+        # Classify products based on volume vs value (only High Volume-High Value and Low Volume-High Value)
+        def classify_product(row):
+            volume_pct = row['volume_percentile']
+            value_pct = row['value_percentile']
+        
+            if volume_pct >= 70 and value_pct >= 70:
+                return 'High Volume - High Value'
+            elif volume_pct <= 30 and value_pct >= 70:
+                return 'Low Volume - High Value'
+            else:
+                # Filter out High Volume-Low Value and Low Volume-Low Value
+                return None
+    
+        product_analysis['volume_value_category'] = product_analysis.apply(classify_product, axis=1)
+    
+        # Filter out None categories (High Volume-Low Value and Low Volume-Low Value)
+        product_analysis = product_analysis[product_analysis['volume_value_category'].notna()].copy()
+    
+        # Focus on interesting categories
+        low_volume_high_value = product_analysis[product_analysis['volume_value_category'] == 'Low Volume - High Value'].head(10)
+        high_volume_high_value = product_analysis[product_analysis['volume_value_category'] == 'High Volume - High Value'].head(10)
+    
+        # Clean presentation - show only visualizations
+    
+        # Define strategic categories with descriptive titles and colors (only two categories)
+        categories = {
+            'High Volume - High Value': ('#2E8B57', 'High Volume - High Value (Market Leaders)'),
+            'Low Volume - High Value': ('#4169E1', 'Low Volume - High Value (Premium Products)')
+        }
+    
+        # Create individual interactive charts for each strategic category
+        for category_name, (color, title) in categories.items():
+            st.subheader(f"{title}")
+        
+            # Get products in this category
+            category_products = product_analysis[product_analysis['volume_value_category'] == category_name]
+        
+            if len(category_products) > 0:
+                # Group by industry for cleaner visualization
+                industry_summary = category_products.groupby('industry_category').agg({
+                    'value_fob_aud': 'sum',
+                    'gross_weight_tonnes': 'sum'
+                }).round(2).reset_index()
+            
+                # Create interactive bar chart with short form value labels
+                def format_short_value(value):
+                    if value >= 1e9:
+                        return f"${value/1e9:.1f}B"
+                    elif value >= 1e6:
+                        return f"${value/1e6:.1f}M"
+                    elif value >= 1e3:
+                        return f"${value/1e3:.1f}K"
+                    else:
+                        return f"${value:.0f}"
+            
+                fig = px.bar(industry_summary, x='value_fob_aud', y='industry_category',
+                            orientation='h',
+                            title=title,
+                            labels={'value_fob_aud': 'Export Value (AUD)', 'industry_category': 'Industry'},
+                            color='value_fob_aud',
+                            color_continuous_scale=[(0, color), (1, color)])  # Use single color
+                fig.update_traces(
+                    text=[format_short_value(value) for value in industry_summary['value_fob_aud']],
+                    textposition='outside',
+                    textfont=dict(size=10, color=color),
+                    hovertemplate='<b>%{y}</b><br>Export Value: $%{x:,.0f}<extra></extra>'
+                )
+            
+                fig.update_layout(
+                    title_font_size=16,
+                    title_font_color=color,
+                    xaxis_title_font_size=14,
+                    yaxis_title_font_size=14,
+                    template='plotly_white',
+                    height=500,
+                    showlegend=False
+                )
+                fig.update_yaxes(autorange="reversed")
+                fig.update_xaxes(tickformat='$,.0f')
+            
+                # Add summary information as annotation
+                total_value = category_products['value_fob_aud'].sum()
+                total_volume = category_products['gross_weight_tonnes'].sum()
+                product_count = len(category_products)
+            
+                # Format numbers
+                def format_number(value):
+                    if value >= 1e9:
+                        return f"{value/1e9:.2f}B"
+                    elif value >= 1e6:
+                        return f"{value/1e6:.2f}M"
+                    elif value >= 1e3:
+                        return f"{value/1e3:.2f}K"
+                    else:
+                        return f"{value:.2f}"
+            
+                def format_volume(value):
+                    if value >= 1e9:
+                        return f"{value/1e9:.2f}B tonnes"
+                    elif value >= 1e6:
+                        return f"{value/1e6:.2f}M tonnes"
+                    elif value >= 1e3:
+                        return f"{value/1e3:.2f}K tonnes"
+                    else:
+                        return f"{value:.2f} tonnes"
+            
+                # Add summary text
+                summary_text = f'Total Products: {product_count}<br>Total Value: ${format_number(total_value)}<br>Total Volume: {format_volume(total_volume)}'
+                fig.add_annotation(
+                    text=summary_text,
+                    xref="paper", yref="paper",
+                    x=0.98, y=0.02,
+                    showarrow=False,
+                    font=dict(size=12, color=color),
+                    bgcolor="white",
+                    bordercolor=color,
+                    borderwidth=1
+                )
+            
+                st.plotly_chart(fig)
+            else:
+                # No products in this category
+                st.info(f"No products found in the {category_name} category.")
+    
+        # Clean presentation - no unnecessary text
+    
+        # 5. STATE & TRANSPORT ANALYSIS (from your notebook Cells 13-16)
+        st.markdown('<h2 class="section-header">State & Transport Analysis</h2>', unsafe_allow_html=True)
+    
+        # State Analysis (from your notebook Cell 13)
+        states = df_filtered.groupby('state_of_origin')['value_fob_aud'].sum().sort_values(ascending=False)
+        states_pct = (states / states.sum() * 100).round(1)
+    
+        st.subheader("Export Value by State")
+    
+        # Clean dashboard - no unnecessary text
+    
+        # Create interactive state visualization with Plotly
+        states_sorted = states.sort_values(ascending=False)
+        states_pct_sorted = states_pct.reindex(states_sorted.index)
+    
+        # Prepare data for Plotly
+        states_df = pd.DataFrame({
+            'state': states_sorted.index,
+            'value_billions': states_sorted.values / 1e9,
+            'percentage': states_pct_sorted.values
+        })
+    
+        # Create interactive horizontal bar chart
+        fig = px.bar(states_df, x='value_billions', y='state',
+                     orientation='h',
+                     title='Export Value by State (2024-2025)',
+                     labels={'value_billions': 'Export Value (Billion AUD)', 'state': 'State'},
+                     color='value_billions',
+                     color_continuous_scale='viridis')
+        fig.update_traces(
+            text=[f"${value:.1f}B<br>({pct:.1f}%)" for value, pct in zip(states_df['value_billions'], states_df['percentage'])],
+            textposition='outside',
+            textfont=dict(size=10, color='#2c3e50'),
+            hovertemplate='<b>%{y}</b><br>Export Value: $%{x:.1f}B<br>Percentage: %{customdata:.1f}%<extra></extra>',
+            customdata=states_df['percentage']
+        )
+    
+        # Update layout for better presentation
+        fig.update_layout(
+            title_font_size=16,
+            title_font_color='#2c3e50',
+            xaxis_title_font_size=14,
+            yaxis_title_font_size=14,
+            template='plotly_white',
+            height=500,
+            showlegend=False
+        )
+    
+        # Update y-axis to show states in descending order (highest at top)
+        fig.update_yaxes(autorange="reversed")
+    
+        # Update x-axis formatting
+        fig.update_xaxes(tickformat='$,.1f')
+    
+        st.plotly_chart(fig)
+    
+        # Transport Mode Analysis (from your notebook Cell 15)
+        st.subheader("Export Value by Transport Mode")
+    
+        transport = df_filtered.groupby('mode_of_transport')['value_fob_aud'].sum().sort_values(ascending=False)
+        transport_pct = (transport / transport.sum() * 100)
+    
+        # Clean dashboard - no unnecessary text
+    
+        # Create interactive transport mode visualization with Plotly
+        transport_sorted = transport.sort_values(ascending=False)
+        transport_pct_sorted = transport_pct.reindex(transport_sorted.index)
+    
+        # Prepare data for Plotly
+        transport_df = pd.DataFrame({
+            'transport_mode': transport_sorted.index,
+            'value_billions': transport_sorted.values / 1e9,
+            'percentage': transport_pct_sorted.values
+        })
+    
+        # Create interactive vertical bar chart
+        fig = px.bar(transport_df, x='transport_mode', y='value_billions',
+                     title='Export Value by Transport Mode (2024-2025)',
+                     labels={'value_billions': 'Export Value (Billion AUD)', 'transport_mode': 'Transport Mode'},
+                     color='value_billions',
+                     color_continuous_scale='viridis')
+        fig.update_traces(
+            text=[f"${value:.1f}B<br>({pct:.1f}%)" for value, pct in zip(transport_df['value_billions'], transport_df['percentage'])],
+            textposition='outside',
+            textfont=dict(size=10, color='#2c3e50'),
+            hovertemplate='<b>%{x}</b><br>Export Value: $%{y:.1f}B<br>Percentage: %{customdata:.1f}%<extra></extra>',
+            customdata=transport_df['percentage']
+        )
+    
+        # Update layout for better presentation
+        fig.update_layout(
+            title_font_size=16,
+            title_font_color='#2c3e50',
+            xaxis_title_font_size=14,
+            yaxis_title_font_size=14,
+            template='plotly_white',
+            height=500,
+            showlegend=False
+        )
+    
+        # Update x-axis labels rotation
+        fig.update_xaxes(tickangle=15)
+    
+        # Update y-axis formatting
+        fig.update_yaxes(tickformat='$,.1f')
+    
+        st.plotly_chart(fig)
+    
+        # 6. CUSTOM ANALYSIS (from your notebook)
+        st.markdown('<h2 class="section-header">Custom Analysis</h2>', unsafe_allow_html=True)
+    
+        # Volume vs Value Analysis section removed as requested
+    
+        # Product Categories Analysis
+        st.subheader("Product Categories Analysis")
+    
+        # Calculate value per tonne for products
+        product_analysis = df_filtered.groupby('product_description').agg({
+            'value_fob_aud': 'sum',
+            'gross_weight_tonnes': 'sum'
+        }).reset_index()
+    
+        product_analysis['value_per_tonne'] = product_analysis['value_fob_aud'] / product_analysis['gross_weight_tonnes']
+        product_analysis = product_analysis.sort_values('value_per_tonne', ascending=False)
+    
+        # Clean presentation - visualizations show the data
+    
+        # 7. PORT ANALYSIS (from your notebook)
+        st.markdown('<h2 class="section-header">Port Analysis</h2>', unsafe_allow_html=True)
+    
+        # Top 15 ports by tonnage
+        st.subheader("Top 15 Ports by Tonnage")
+    
+        port_tonnage = df_filtered.groupby('port_of_loading')['gross_weight_tonnes'].sum().sort_values(ascending=False).head(15)
+    
+        # Create interactive lollipop chart
+        port_tonnage_df = port_tonnage.reset_index()
+        port_tonnage_df.columns = ['port_of_loading', 'gross_weight_tonnes']
+    
+        fig = px.bar(port_tonnage_df, x='gross_weight_tonnes', y='port_of_loading',
+                     orientation='h',
+                     title='Top 15 Ports by Tonnage',
+                     labels={'gross_weight_tonnes': 'Total Tonnage', 'port_of_loading': 'Port'},
+                     color='gross_weight_tonnes',
+                     color_continuous_scale='viridis')
+        fig.update_traces(
+            text=[f"{value/1e6:.1f}M" for value in port_tonnage_df['gross_weight_tonnes']],
+            textposition='outside',
+            textfont=dict(size=10, color='#2c3e50'),
+            hovertemplate='<b>%{y}</b><br>Total Tonnage: %{x:,.0f} tonnes<extra></extra>'
+        )
+        fig.update_layout(
+            title_font_size=16,
+            title_font_color='#2c3e50',
+            xaxis_title_font_size=14,
+            yaxis_title_font_size=14,
+            template='plotly_white',
+            height=600
+        )
+        fig.update_yaxes(autorange="reversed")
+        fig.update_xaxes(tickformat=',.0f')
+        st.plotly_chart(fig)
+    
+        # Port Efficiency Analysis (from your notebook) - Using FULL dataset for accuracy
+        st.subheader("Port Efficiency Analysis")
+    
+        # Use filtered dataset for accurate port analysis to respect date range selection
+        port_efficiency = df_filtered.groupby('port_of_loading').agg({
+            'value_fob_aud': 'sum',
+            'country_of_destination': 'count'
+        }).reset_index()
+    
+        port_efficiency = port_efficiency.rename(columns={'country_of_destination': 'shipment_count'})
+    
+        # Calculate key efficiency metrics
+        port_efficiency['avg_value_per_shipment'] = port_efficiency['value_fob_aud'] / port_efficiency['shipment_count']
+        port_efficiency['total_value_millions'] = port_efficiency['value_fob_aud'] / 1e6
+        port_efficiency['shipments_per_day'] = port_efficiency['shipment_count'] / 730  # 2 years of data
+    
+        # Filter for ports with significant activity (at least 50 shipments)
+        significant_ports = port_efficiency[port_efficiency['shipment_count'] >= 50].copy()
+        significant_ports = significant_ports.sort_values('avg_value_per_shipment', ascending=False)
+    
+        # High-value ports
+        # Clean presentation - visualizations show the data
+    
+        # Port Value Visualizations (Interactive)
+        st.subheader("Port Value Visualizations")
+    
+        # 1. TOP 15 HIGH-VALUE PORTS (Interactive)
+        top_15_high_value = significant_ports.head(15)
+        # Create short form value labels for high-value ports
+        def format_short_value(value):
+            if value >= 1e6:
+                return f"${value/1e6:.1f}M"
+            elif value >= 1e3:
+                return f"${value/1e3:.1f}K"
+            else:
+                return f"${value:.0f}"
+    
+        fig1 = px.bar(top_15_high_value, x='avg_value_per_shipment', y='port_of_loading',
+                      orientation='h',
+                      title='TOP 15 HIGH-VALUE PORTS (Average Value per Shipment)',
+                      labels={'avg_value_per_shipment': 'Average Value per Shipment ($)', 'port_of_loading': 'Port'},
+                      color='avg_value_per_shipment',
+                      color_continuous_scale='Greens',
+                      text=[format_short_value(value) for value in top_15_high_value['avg_value_per_shipment']])
+        fig1.update_layout(
+            title_font_size=16,
+            title_font_color='#2c3e50',
+            xaxis_title_font_size=14,
+            yaxis_title_font_size=14,
+            template='plotly_white',
+            height=600
+        )
+        fig1.update_yaxes(autorange="reversed")
+        fig1.update_xaxes(tickformat='$,.0f')
+        fig1.update_traces(
+            textposition='outside',
+            textfont=dict(size=10, color='#2c3e50'),
+            hovertemplate='<b>%{y}</b><br>Average Value per Shipment: $%{x:,.0f}<extra></extra>'
+        )
+        st.plotly_chart(fig1)
+    
+        # 2. LOWEST 15 VALUE PORTS (Interactive)
+        lowest_15_value = significant_ports.nsmallest(15, 'avg_value_per_shipment')
+        fig2 = px.bar(lowest_15_value, x='avg_value_per_shipment', y='port_of_loading',
+                      orientation='h',
+                      title='LOWEST 15 VALUE PORTS (Potential Congestion Risk)',
+                      labels={'avg_value_per_shipment': 'Average Value per Shipment ($)', 'port_of_loading': 'Port'},
+                      color='avg_value_per_shipment',
+                      color_continuous_scale='Reds',
+                      text=[format_short_value(value) for value in lowest_15_value['avg_value_per_shipment']])
+        fig2.update_layout(
+            title_font_size=16,
+            title_font_color='#2c3e50',
+            xaxis_title_font_size=14,
+            yaxis_title_font_size=14,
+            template='plotly_white',
+            height=600
+        )
+        fig2.update_yaxes(autorange="reversed")
+        fig2.update_xaxes(tickformat='$,.0f')
+        fig2.update_traces(
+            textposition='outside',
+            textfont=dict(size=10, color='#2c3e50'),
+            hovertemplate='<b>%{y}</b><br>Average Value per Shipment: $%{x:,.0f}<extra></extra>'
+        )
+        st.plotly_chart(fig2)
+    
+        # 8. REGIONAL ANALYSIS (EXACT from your notebook) - Using FULL dataset
+        st.markdown('<h2 class="section-header">Regional Analysis</h2>', unsafe_allow_html=True)
+    
+        # Use filtered dataset for accurate regional analysis to respect date range selection
+        # Need to copy because we'll be adding new columns (region)
+        df_full = df_filtered.copy()
+    
+        # Add calculated fields only if they don't already exist (they should from initial load)
+        if 'date' not in df_full.columns:
+            df_full['date'] = pd.to_datetime(df_full['year'].astype(str) + '-' + df_full['month_number'].astype(str).str.zfill(2) + '-01')
+        if 'value_per_tonne' not in df_full.columns:
+            df_full['value_per_tonne'] = df_full['value_fob_aud'] / df_full['gross_weight_tonnes']
+    
+        # EXACT CODE FROM YOUR NOTEBOOK - Regional Mapping using region_mapping.py
+        try:
+            from region_mapping import add_region_to_dataframe
+            # Add region column to existing dataframe
+            df_full = add_region_to_dataframe(df_full, 'country_of_destination', 'region')
+        except ImportError:
+            # Fallback if region_mapping.py is not available
+            def get_region(country):
+                asia_pacific = ['China', 'Japan', 'Korea, Republic of (South)', 'Singapore', 'India', 'Taiwan', 
+                               'Indonesia', 'Malaysia', 'Hong Kong', 'Vietnam', 'Thailand', 'Philippines']
+                europe = ['United Kingdom, Channel Islands and Isle of Man, nfd', 'Germany', 'France', 'Italy']
+                americas = ['United States of America', 'Canada', 'Brazil', 'Mexico']
+                middle_east = ['United Arab Emirates', 'Saudi Arabia', 'Turkey']
+            
+                if country in asia_pacific:
+                    return 'Asia-Pacific'
+                elif country in europe:
+                    return 'Europe'
+                elif country in americas:
+                    return 'Americas'
+                elif country in middle_east:
+                    return 'Middle East'
+                else:
+                    return 'Other'
+        
+            # Add region column
+            df_full['region'] = df_full['country_of_destination'].apply(get_region)
+    
+        # Check which countries are mapped to "Other" (EXACT from your notebook)
+        other_countries = df_full[df_full['region'] == 'Other']['country_of_destination'].unique()
+        # Clean dashboard - no unnecessary text
+    
+        # 2. REGIONAL EXPORT SHARE ANALYSIS (EXACT from your notebook)
+        regional_analysis = df_full.groupby('region')['value_fob_aud'].sum().reset_index()
+        regional_analysis['value_billions'] = regional_analysis['value_fob_aud'] / 1e9
+        regional_analysis['market_share_pct'] = (regional_analysis['value_fob_aud'] / regional_analysis['value_fob_aud'].sum()) * 100
+    
+        # Sort by market share
+        regional_analysis = regional_analysis.sort_values('market_share_pct', ascending=False)
+    
+        # 3. COMBINE SMALL REGIONS WITH MAIN "OTHER" CATEGORY (EXACT from your notebook)
+        small_regions = regional_analysis[regional_analysis['market_share_pct'] <= 1.0]
+        other_mask = regional_analysis['region'] == 'Other'
+    
+        if other_mask.any() and len(small_regions) > 0:
+            # Add small regions to the main "Other" category
+            regional_analysis.loc[other_mask, 'market_share_pct'] += small_regions['market_share_pct'].sum()
+            regional_analysis.loc[other_mask, 'value_fob_aud'] += small_regions['value_fob_aud'].sum()
+            regional_analysis.loc[other_mask, 'value_billions'] = regional_analysis.loc[other_mask, 'value_fob_aud'] / 1e9
+        
+            # Remove small regions from the data
+            regional_analysis = regional_analysis[~regional_analysis.index.isin(small_regions.index)]
+        
+            # Clean dashboard - no unnecessary text
+    
+        # Re-sort after combining
+        regional_analysis = regional_analysis.sort_values('market_share_pct', ascending=False)
+    
+        # Clean dashboard - no unnecessary text
+    
+        # 4. REGIONAL VISUALIZATIONS (Interactive) - EXACT from your notebook
+        st.subheader("Regional Visualizations")
+    
+        # 4.1 Regional Market Share Pie Chart (Interactive)
+        fig1 = px.pie(regional_analysis, values='market_share_pct', names='region',
+                      title='Australian Export Share by Region (Combined Other Categories)',
+                      color_discrete_sequence=px.colors.qualitative.Set3)
+        fig1.update_layout(
+            title_font_size=16,
+            title_font_color='#2c3e50',
+            template='plotly_white',
+            height=500
+        )
+        fig1.update_traces(textposition='inside', textinfo='percent+label')
+        st.plotly_chart(fig1)
+    
+        # 4.2 Regional Value Comparison Bar Chart (Interactive)
+        fig2 = px.bar(regional_analysis, x='region', y='value_billions',
+                      title='Export Value by Region (Billions AUD)',
+                      labels={'value_billions': 'Export Value (Billions AUD)', 'region': 'Region'},
+                      color='value_billions',
+                      color_continuous_scale='viridis',
+                      text=[f"${value:.1f}B" for value in regional_analysis['value_billions']])
+        fig2.update_layout(
+            title_font_size=16,
+            title_font_color='#2c3e50',
+            xaxis_title_font_size=14,
+            yaxis_title_font_size=14,
+            template='plotly_white',
+            height=500
+        )
+        fig2.update_xaxes(tickangle=45)
+        fig2.update_yaxes(tickformat='$,.1f')
+        fig2.update_traces(
+            textposition='outside',
+            textfont=dict(size=12, color='#2c3e50'),
+            hovertemplate='<b>%{x}</b><br>Export Value: $%{y:.1f}B<extra></extra>'
+        )
+        st.plotly_chart(fig2)
+    
+        # Clean dashboard - no unnecessary text
+    
+        # 9. GROWING & DECLINING MARKETS ANALYSIS (EXACT from your notebook)
+        try:
+            st.markdown('<h2 class="section-header">Growing & Declining Markets Analysis</h2>', unsafe_allow_html=True)
+        
+            # Clean presentation - show only visualizations
+        
+            # Filter for Q1 months (January, February, March, April)
+            # Handle different month column formats
+            if 'month' in df_filtered.columns:
+                # If month column contains full date strings like "January 2024", extract just the month name
+                if df_filtered['month'].dtype == 'object':
+                    month_names = df_filtered['month'].astype(str).str.split().str[0]
+                    q1_months = ['January', 'February', 'March', 'April']
+                    df_q1 = df_filtered[month_names.isin(q1_months)].copy()
+                else:
+                    # If month is already just month names
+                    q1_months = ['January', 'February', 'March', 'April']
+                    df_q1 = df_filtered[df_filtered['month'].isin(q1_months)].copy()
+            elif 'month_number' in df_filtered.columns:
+                # If only month_number exists, filter for Q1 (months 1-4)
+                df_q1 = df_filtered[df_filtered['month_number'].isin([1, 2, 3, 4])].copy()
+            else:
+                df_q1 = pd.DataFrame()
+                st.warning("Month information not available for Q1 filtering.")
+        
+            if len(df_q1) > 0 and 'year' in df_q1.columns and 'country_of_destination' in df_q1.columns:
+                # Ensure year is numeric for proper grouping
+                df_q1['year'] = pd.to_numeric(df_q1['year'], errors='coerce')
+            
+                # Calculate export values by country and year for Q1 only
+                country_yearly = df_q1.groupby(['country_of_destination', 'year'])['value_fob_aud'].sum().unstack(fill_value=0)
+            
+                # Convert year columns to numeric if they're strings
+                country_yearly.columns = pd.to_numeric(country_yearly.columns, errors='coerce')
+            
+                # Calculate YoY growth
+                if 2024 in country_yearly.columns and 2025 in country_yearly.columns:
+                    # Handle division by zero
+                    country_yearly = country_yearly[country_yearly[2024] > 0].copy()  # Remove countries with zero 2024 value
+                
+                    country_yearly['YoY_Growth_%'] = ((country_yearly[2025] - country_yearly[2024]) / country_yearly[2024] * 100).round(2)
+                    country_yearly['YoY_Growth_Absolute'] = (country_yearly[2025] - country_yearly[2024]) / 1e9  # in billions
+                    country_yearly['Q1_2024_Value'] = country_yearly[2024] / 1e9  # in billions
+                    country_yearly['Q1_2025_Value'] = country_yearly[2025] / 1e9  # in billions
+                
+                    # Filter countries with significant trade volume (at least $100M in Q1 2024)
+                    significant_countries = country_yearly[country_yearly[2024] >= 1e8].copy()  # $100M threshold
+                
+                    if len(significant_countries) > 0:
+                        # Sort by YoY growth
+                        significant_countries = significant_countries.sort_values('YoY_Growth_%', ascending=False)
+                    
+                        # Clean presentation - show only visualizations
+                    
+                        # 6.1 Top 15 Growing Markets (Interactive)
+                        top_growing = significant_countries.head(15).reset_index()
+                        fig1 = px.bar(top_growing, x='YoY_Growth_%', y='country_of_destination',
+                                      orientation='h',
+                                      title='Top 15 Growing Markets (Q1 2024 → Q1 2025)',
+                                      labels={'YoY_Growth_%': 'YoY Growth (%)', 'country_of_destination': 'Country'},
+                                      color='YoY_Growth_%',
+                                      color_continuous_scale='viridis',
+                                      text=[f"{value:.1f}%" for value in top_growing['YoY_Growth_%']])
+                        fig1.update_layout(
+                            title_font_size=16,
+                            title_font_color='#2c3e50',
+                            xaxis_title_font_size=14,
+                            yaxis_title_font_size=14,
+                            template='plotly_white',
+                            height=600
+                        )
+                        fig1.update_yaxes(autorange="reversed")
+                        fig1.add_vline(x=0, line_dash="dash", line_color="black", opacity=0.3)
+                        fig1.update_traces(
+                            textposition='outside',
+                            textfont=dict(size=10, color='#2c3e50'),
+                            hovertemplate='<b>%{y}</b><br>YoY Growth: %{x:.1f}%<extra></extra>'
+                        )
+                        st.plotly_chart(fig1)
+                    
+                        # 6.2 Top 15 Declining Markets (Interactive)
+                        top_declining = significant_countries.tail(15).reset_index()
+                        fig2 = px.bar(top_declining, x='YoY_Growth_%', y='country_of_destination',
+                                      orientation='h',
+                                      title='Top 15 Declining Markets (Q1 2024 → Q1 2025)',
+                                      labels={'YoY_Growth_%': 'YoY Growth (%)', 'country_of_destination': 'Country'},
+                                      color='YoY_Growth_%',
+                                      color_continuous_scale='plasma',
+                                      text=[f"{value:.1f}%" for value in top_declining['YoY_Growth_%']])
+                        fig2.update_layout(
+                            title_font_size=16,
+                            title_font_color='#2c3e50',
+                            xaxis_title_font_size=14,
+                            yaxis_title_font_size=14,
+                            template='plotly_white',
+                            height=600
+                        )
+                        fig2.update_yaxes(autorange="reversed")
+                        fig2.add_vline(x=0, line_dash="dash", line_color="black", opacity=0.3)
+                        fig2.update_traces(
+                            textposition='outside',
+                            textfont=dict(size=10, color='#2c3e50'),
+                            hovertemplate='<b>%{y}</b><br>YoY Growth: %{x:.1f}%<extra></extra>'
+                        )
+                        st.plotly_chart(fig2)
+                    else:
+                        st.warning("No countries meet the significant trade volume threshold ($100M in Q1 2024) for growth analysis.")
+                else:
+                    st.warning("Data for both 2024 and 2025 Q1 periods is required for YoY growth analysis. Current data may only cover one year.")
+            else:
+                st.warning("Insufficient data available for Q1 analysis. Please check your date range filters.")
+        except Exception as e:
+            st.error(f"Error in Growing & Declining Markets Analysis: {str(e)}")
             import traceback
             st.code(traceback.format_exc())
     
-    # Final compatibility guard: ensure 'product_description' exists even if cached data is old
-    if 'product_description' not in df.columns:
-        import re
-        def _norm(s: str) -> str:
-            return re.sub(r"[^a-z0-9]", "", str(s).lower())
-        candidates = ['product_description', 'product description', 'product', 'sitc', 'commodity', 'sitc description', 'sitc_description']
-        norm_to_col = { _norm(c): c for c in df.columns }
-        src = None
-        for cand in candidates:
-            key = _norm(cand)
-            if key in norm_to_col:
-                src = norm_to_col[key]
-                break
-        if src:
-            df['product_description'] = df[src].astype(str)
-        else:
-            df['product_description'] = 'All Products'
-    # Clean presentation - no status messages
-    
-    # Sidebar controls
-    st.sidebar.header("Dashboard Controls")
-    
-    # Cache clear button (moved after data loading mode)
-    if st.sidebar.button("Clear Cache & Reload Data", help="Clear cached data and force fresh data reload"):
-        st.cache_data.clear()
-        st.success("Cache cleared! Refreshing...")
-        st.rerun()
-    
-    st.sidebar.markdown("---")
-    
-    # Date range filter
-    st.sidebar.subheader("Date Range")
-    min_date = df['date'].min().date()
-    max_date = df['date'].max().date()
-    
-    date_range = st.sidebar.date_input(
-        "Select Date Range",
-        value=(min_date, max_date),
-        min_value=min_date
-    )
-    
-    # Filter data based on date range
-    if len(date_range) == 2:
-        start_date, end_date = date_range
-        df_filtered = df[(df['date'].dt.date >= start_date) & (df['date'].dt.date <= end_date)]
-    else:
-        df_filtered = df
-    
-    # Country filter
-    st.sidebar.subheader("Country Filter")
-    all_countries = ['All Countries'] + sorted(df['country_of_destination'].unique().tolist())
-    selected_countries = st.sidebar.multiselect(
-        "Select Countries",
-        options=all_countries,
-        default=['All Countries']
-    )
-    
-    if 'All Countries' not in selected_countries and selected_countries:
-        df_filtered = df_filtered[df_filtered['country_of_destination'].isin(selected_countries)]
-    
-    # Product filter
-    st.sidebar.subheader("Product Filter")
-    all_products = ['All Products'] + sorted(df['product_description'].unique().tolist())
-    selected_products = st.sidebar.multiselect(
-        "Select Products",
-        options=all_products,
-        default=['All Products']
-    )
-    
-    if 'All Products' not in selected_products and selected_products:
-        df_filtered = df_filtered[df_filtered['product_description'].isin(selected_products)]
-    
-    # Main dashboard content
-    
-    # 1. DATASET SUMMARY (from your notebook Cell 4)
-    st.markdown('<h2 class="section-header">Dataset Summary</h2>', unsafe_allow_html=True)
-    
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        st.markdown(f"""
-        <div class="metric-card">
-            <h3>Total Records</h3>
-            <h2>{len(df_filtered):,}</h2>
-            <p>Individual Shipments</p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col2:
-        st.markdown(f"""
-        <div class="metric-card">
-            <h3>Countries</h3>
-            <h2>{df_filtered['country_of_destination'].nunique()}</h2>
-            <p>Export Destinations</p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col3:
-        st.markdown(f"""
-        <div class="metric-card">
-            <h3>Products</h3>
-            <h2>{df_filtered['product_description'].nunique()}</h2>
-            <p>Product Types</p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col4:
-        st.markdown(f"""
-        <div class="metric-card">
-            <h3>States</h3>
-            <h2>{df_filtered['state_of_origin'].nunique()}</h2>
-            <p>Export States</p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    # Financial Summary (from your notebook Cell 4)
-    st.markdown('<h2 class="section-header">Financial Summary</h2>', unsafe_allow_html=True)
-    
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        # Calculate from filtered dataset to respect date range selection
-        total_value = df_filtered['value_fob_aud'].sum()
-        if total_value >= 1e9:
-            value_display = f"${total_value/1e9:.1f}B"
-        elif total_value >= 1e6:
-            value_display = f"${total_value/1e6:.1f}M"
-        elif total_value >= 1e3:
-            value_display = f"${total_value/1e3:.1f}K"
-        else:
-            value_display = f"${total_value:,.0f}"
-        st.markdown(f"""
-        <div class="metric-card">
-            <h3>Total Export Value</h3>
-            <h2>{value_display}</h2>
-            <p>Australian Dollars </p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col2:
-        # Calculate from filtered dataset to respect date range selection
-        avg_shipment = df_filtered['value_fob_aud'].mean()
-        if avg_shipment >= 1e6:
-            avg_display = f"${avg_shipment/1e6:.1f}M"
-        elif avg_shipment >= 1e3:
-            avg_display = f"${avg_shipment/1e3:.1f}K"
-        else:
-            avg_display = f"${avg_shipment:,.0f}"
-        st.markdown(f"""
-        <div class="metric-card">
-            <h3>Avg Shipment Value</h3>
-            <h2>{avg_display}</h2>
-            <p>Australian Dollars </p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col3:
-        # Calculate from filtered dataset to respect date range selection
-        median_shipment = df_filtered['value_fob_aud'].median()
-        if median_shipment >= 1e6:
-            median_display = f"${median_shipment/1e6:.1f}M"
-        elif median_shipment >= 1e3:
-            median_display = f"${median_shipment/1e3:.1f}K"
-        else:
-            median_display = f"${median_shipment:,.0f}"
-        st.markdown(f"""
-        <div class="metric-card">
-            <h3>Median Shipment</h3>
-            <h2>{median_display}</h2>
-            <p>Australian Dollars </p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col4:
-        # Calculate from filtered dataset to respect date range selection
-        total_weight = df_filtered['gross_weight_tonnes'].sum()
-        if total_weight >= 1e9:
-            weight_display = f"{total_weight/1e9:.1f}B"
-        elif total_weight >= 1e6:
-            weight_display = f"{total_weight/1e6:.1f}M"
-        elif total_weight >= 1e3:
-            weight_display = f"{total_weight/1e3:.1f}K"
-        else:
-            weight_display = f"{total_weight:,.0f}"
-        st.markdown(f"""
-        <div class="metric-card">
-            <h3>Total Weight</h3>
-            <h2>{weight_display}</h2>
-            <p>Tonnes </p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    # Force cleanup after overview
-    gc.collect()
-    
-    # 2. TIME SERIES ANALYSIS (from your notebook Cell 6) - LAZY LOADED
-    try:
-        st.markdown('<h2 class="section-header">Time Series Analysis</h2>', unsafe_allow_html=True)
-        
-        # Use filtered dataset for time series analysis - avoid copy
-        df_ts_raw = df_filtered  # Use view to save memory
-        
-        if df_ts_raw.empty:
-            st.warning("No data available for time series analysis.")
-        else:
-            # Check required columns exist
-            required_cols = ['year', 'month_number', 'value_fob_aud', 'gross_weight_tonnes']
-            missing_cols = [col for col in required_cols if col not in df_ts_raw.columns]
-            if not missing_cols:
-                # Ensure month_number and year are not NaN for grouping - create copy only when needed
-                mask = df_ts_raw['month_number'].notna() & df_ts_raw['year'].notna()
-                df_ts = df_ts_raw[mask].copy()  # Only copy filtered subset
-                del mask
-                gc.collect()
-                
-                if len(df_ts) == 0:
-                    st.warning("No valid date data available for time series analysis.")
-                else:
-                    # Monthly trends - handle month column (may be missing or in different format)
-                    if 'month' in df_ts.columns:
-                        group_cols = ['year', 'month_number', 'month']
-                    else:
-                        # Create month name from month_number if month column is missing
-                        month_names = {1: 'January', 2: 'February', 3: 'March', 4: 'April',
-                                       5: 'May', 6: 'June', 7: 'July', 8: 'August',
-                                       9: 'September', 10: 'October', 11: 'November', 12: 'December'}
-                        df_ts['month'] = df_ts['month_number'].map(month_names).fillna('Unknown')
-                        group_cols = ['year', 'month_number', 'month']
-                    
-                    # Process aggregation efficiently
-                    monthly = df_ts.groupby(group_cols).agg({
-                        'value_fob_aud': 'sum',
-                        'gross_weight_tonnes': 'sum'
-                    }).reset_index().sort_values(['year', 'month_number'])
-                    
-                    # Clean up df_ts immediately after use
-                    del df_ts
-                    gc.collect()
-                    
-                    # Check if we have data for the selected date range
-                    if len(monthly) > 0:
-                        # Safely create period string - extract only month name (remove any year that might be in month column)
-                        # Extract just the month name (first word) to avoid duplicate years
-                        month_names_only = monthly['month'].astype(str).str.split().str[0]  # Get first word only
-                        monthly['period'] = month_names_only + ' ' + monthly['year'].astype(str)
-                        # Handle division by zero and infinite values
-                        monthly['value_per_tonne'] = monthly['value_fob_aud'] / monthly['gross_weight_tonnes'].replace(0, np.nan)
-                        monthly['value_per_tonne'] = monthly['value_per_tonne'].replace([np.inf, -np.inf], np.nan).fillna(0)
-                        
-                        # Ensure all numeric columns are valid
-                        monthly = monthly[monthly['value_fob_aud'].notna() & monthly['gross_weight_tonnes'].notna()]
-                        
-                        if len(monthly) == 0:
-                            st.warning("No valid data after cleaning for time series analysis.")
-                        else:
-                            # Chart 1: Export Value Over Time (Interactive)
-                            st.subheader("Monthly Export Value Trend")
-                            
-                            # Smart formatting for export values
-                            def format_export_value(value):
-                                if value >= 1e9:
-                                    return f"${value/1e9:.1f}B"
-                                elif value >= 1e6:
-                                    return f"${value/1e6:.1f}M"
-                                elif value >= 1e3:
-                                    return f"${value/1e3:.1f}K"
-                                else:
-                                    return f"${value:,.0f}"
-                            
-                            fig1 = px.line(monthly, x='period', y=monthly['value_fob_aud'] / 1e9,
-                                           title='Monthly Export Value Trend (2024-2025)',
-                                           labels={'y': 'Export Value (Billion AUD)', 'x': 'Month'},
-                                           markers=True)
-                            fig1.update_traces(
-                                line_color='#2E86AB', 
-                                line_width=3, 
-                                marker_size=8,
-                                mode='lines+markers+text',
-                                text=[format_export_value(value) for value in monthly['value_fob_aud']],
-                                textposition='top center'
-                            )
-                            fig1.update_layout(
-                                title_font_size=16,
-                                title_font_color='#2c3e50',
-                                xaxis_title_font_size=14,
-                                yaxis_title_font_size=14,
-                                hovermode='x unified',
-                                template='plotly_white',
-                                yaxis=dict(tickformat='.1f')
-                            )
-                            fig1.update_xaxes(tickangle=45)
-                            st.plotly_chart(fig1)
-
-                            # Chart 2: Export Weight Over Time (Interactive)
-                            st.subheader("Monthly Export Weight Trend")
-                            
-                            # Smart formatting for weight values
-                            def format_weight_value(value):
-                                if value >= 1e9:
-                                    return f"{value/1e9:.1f}B"
-                                elif value >= 1e6:
-                                    return f"{value/1e6:.1f}M"
-                                elif value >= 1e3:
-                                    return f"{value/1e3:.1f}K"
-                                else:
-                                    return f"{value:,.0f}"
-                            
-                            fig2 = px.line(monthly, x='period', y=monthly['gross_weight_tonnes'] / 1e6,
-                                           title='Monthly Export Weight Trend (2024-2025)',
-                                           labels={'y': 'Export Weight (Million Tonnes)', 'x': 'Month'},
-                                           markers=True)
-                            fig2.update_traces(
-                                line_color='#F18F01', 
-                                line_width=3, 
-                                marker_size=8,
-                                marker_symbol='square',
-                                mode='lines+markers+text',
-                                text=[format_weight_value(value) for value in monthly['gross_weight_tonnes']],
-                                textposition='top center'
-                            )
-                            fig2.update_layout(
-                                title_font_size=16,
-                                title_font_color='#2c3e50',
-                                xaxis_title_font_size=14,
-                                yaxis_title_font_size=14,
-                                hovermode='x unified',
-                                template='plotly_white',
-                                yaxis=dict(tickformat='.1f')
-                            )
-                            fig2.update_xaxes(tickangle=45)
-                            st.plotly_chart(fig2)
-
-                            # Chart 3: Value per Tonne Over Time (Interactive) - KEY METRIC FOR LOGISTICS!
-                            st.subheader("Average Value per Tonne Trend")
-                            
-                            # Smart formatting for value per tonne
-                            def format_value_per_tonne(value):
-                                if value >= 1e6:
-                                    return f"${value/1e6:.1f}M"
-                                elif value >= 1e3:
-                                    return f"${value/1e3:.1f}K"
-                                else:
-                                    return f"${value:,.0f}"
-                            
-                            fig3 = px.line(monthly, x='period', y=monthly['value_per_tonne'],
-                                           title='Average Value per Tonne Trend (2024-2025)',
-                                           labels={'y': 'Value per Tonne (AUD)', 'x': 'Month'},
-                                           markers=True)
-                            fig3.update_traces(
-                                line_color='#06A77D', 
-                                line_width=3, 
-                                marker_size=8,
-                                marker_symbol='diamond',
-                                mode='lines+markers+text',
-                                text=[format_value_per_tonne(value) for value in monthly['value_per_tonne']],
-                                textposition='top center'
-                            )
-                            fig3.update_layout(
-                                title_font_size=16,
-                                title_font_color='#2c3e50',
-                                xaxis_title_font_size=14,
-                                yaxis_title_font_size=14,
-                                hovermode='x unified',
-                                template='plotly_white',
-                                yaxis=dict(tickformat=',.0f')
-                            )
-                            fig3.update_xaxes(tickangle=45)
-                            st.plotly_chart(fig3)
-                    else:
-                        st.warning("No data available for the selected date range. Please adjust your date filter.")
-            else:
-                st.warning(f"Missing required columns for time series analysis: {missing_cols}")
-            
-            # Clean up memory after time series section
-            del df_ts_raw
-            if 'monthly' in locals():
-                del monthly
-            gc.collect()
-    except Exception as e:
-        st.error(f"Error in Time Series Analysis: {str(e)}")
-        import traceback
-        st.code(traceback.format_exc())
-        gc.collect()
-    
-    # Force cleanup after time series
-    gc.collect()
-    
-    # 3. COUNTRY ANALYSIS (from your notebook Cell 9) - LAZY LOADED
-    st.markdown('<h2 class="section-header">Country Analysis</h2>', unsafe_allow_html=True)
-    
-    # Use filtered dataset for country analysis - avoid copy
-    df_country = df_filtered  # Use view to save memory
-    
-    if not df_country.empty:
-        # Top export destinations - process efficiently
-        top_countries = df_country.groupby('country_of_destination').agg({
-            'value_fob_aud': 'sum',
-            'gross_weight_tonnes': 'sum'
-        }).sort_values('value_fob_aud', ascending=False)
-        
-        # Clean up df_country reference immediately
-        del df_country
-        gc.collect()
-        
-        # Check if we have data for the selected date range
-        if len(top_countries) > 0:
-            top_countries['value_billions'] = top_countries['value_fob_aud'] / 1e9
-            top_countries['pct'] = (top_countries['value_fob_aud'] / top_countries['value_fob_aud'].sum() * 100)
-            
-            # Display top 15 countries
-            # Clean presentation - visualization shows the data
-            
-            # Interactive Visualization with Value Labels (No Percentage)
-            top_15 = top_countries.head(15).reset_index()
-            
-            fig = px.bar(top_15, x='value_billions', y='country_of_destination',
-                         orientation='h',
-                         title='Top 15 Countries by Export Value',
-                         labels={'value_billions': 'Export Value (Billion AUD)', 'country_of_destination': 'Country'},
-                         color='value_billions',
-                         color_continuous_scale='Greens')
-            fig.update_traces(
-                text=[f"${value:.1f}B" for value in top_15['value_billions']],
-                textposition='outside'
-            )
-            
-            fig.update_layout(
-                title_font_size=16,
-                title_font_color='#2c3e50',
-                xaxis_title_font_size=14,
-                yaxis_title_font_size=14,
-                template='plotly_white',
-                height=600,
-                showlegend=False
-            )
-            fig.update_yaxes(autorange="reversed")
-            fig.update_xaxes(tickformat='$,.1f')
-            
-            # Update text positioning and styling
-            fig.update_traces(
-                textposition='outside',
-                textfont=dict(size=10, color='#2c3e50'),
-                hovertemplate='<b>%{y}</b><br>Export Value: $%{x:.1f}B<extra></extra>'
-            )
-            
-            st.plotly_chart(fig)
-            
-            # Clean up memory after country analysis
-            del top_countries, top_15, fig
-            gc.collect()
-        else:
-            st.warning("No data available for the selected date range. Please adjust your date filter.")
-    else:
-        st.warning("No data available for country analysis")
-    
-    # Force cleanup
-    gc.collect()
-    
-    # 4. PRODUCT ANALYSIS (from your notebook Cell 11) - LAZY LOADED
-    st.markdown('<h2 class="section-header">Product Analysis</h2>', unsafe_allow_html=True)
-    
-    # Use filtered dataset for product analysis - avoid copy
-    df_product = df_filtered  # Use view to save memory
-    
-    if not df_product.empty:
-        TOP_PRODUCT_COUNT = 15  # Number of top products to display
-        
-        # Top products by value - process efficiently
-        top_products = df_product.groupby('product_description').agg({
-            'value_fob_aud': 'sum',
-            'gross_weight_tonnes': 'sum'
-        }).sort_values('value_fob_aud', ascending=False)
-        
-        # Clean up df_product reference immediately
-        del df_product
-        gc.collect()
-
-        # Create clean display columns (rounded to 2 decimal places)
-        top_products['Value ($B)'] = (top_products['value_fob_aud'] / 1e9).round(2)
-        top_products['Weight (M Tonnes)'] = (top_products['gross_weight_tonnes'] / 1e6).round(2)
-        top_products['% Total'] = ((top_products['value_fob_aud'] / top_products['value_fob_aud'].sum() * 100)).round(2)
-
-        # Check if we have data for the selected date range
-        if len(top_products) > 0:
-            # Get top products with FULL product names (no truncation)
-            top_display = top_products.head(TOP_PRODUCT_COUNT).copy()
-            top_display['Product'] = top_display.index  # Full product name
-
-            # Reset index and add rank
-            top_display = top_display.reset_index(drop=True)
-            if len(top_display) > 0:
-                top_display.index = range(1, min(TOP_PRODUCT_COUNT + 1, len(top_display) + 1))
-                top_display.index.name = 'Rank'
-            
-            # Create final display DataFrame
-            products_df = top_display[['Product', 'Value ($B)', 'Weight (M Tonnes)', '% Total']].copy()
-            
-            # Display summary
-            st.subheader(f"Top {TOP_PRODUCT_COUNT} Products by Export Value")
-            
-            # Interactive Product Visualization with Value Labels (No Percentage)
-            top_products_chart = top_products.head(TOP_PRODUCT_COUNT).reset_index()
-            
-            fig = px.bar(top_products_chart, x='value_fob_aud', y='product_description',
-                         orientation='h',
-                         title=f'Top {TOP_PRODUCT_COUNT} Products by Export Value',
-                         labels={'value_fob_aud': 'Export Value (AUD)', 'product_description': 'Product'},
-                         color='value_fob_aud',
-                         color_continuous_scale='Blues')
-            fig.update_traces(
-                text=[f"${value/1e9:.1f}B" for value in top_products_chart['value_fob_aud']],
-                textposition='outside',
-                textfont=dict(size=9, color='#2c3e50'),
-                hovertemplate='<b>%{y}</b><br>Export Value: $%{x:,.0f}<extra></extra>'
-            )
-            
-            fig.update_layout(
-                title_font_size=16,
-                title_font_color='#2c3e50',
-                xaxis_title_font_size=14,
-                yaxis_title_font_size=14,
-                template='plotly_white',
-                height=800,
-                showlegend=False
-            )
-            fig.update_yaxes(autorange="reversed")
-            fig.update_xaxes(tickformat='$,.0f')
-            
-            st.plotly_chart(fig)
-        else:
-            st.warning("No data available for the selected date range. Please adjust your date filter.")
-        
-        # Clean up memory after product analysis
-        del top_products, top_display, top_products_chart, products_df, fig
-        gc.collect()
-    else:
-        st.warning("No data available for product analysis")
-    
-    # Force cleanup
-    gc.collect()
-    
-    # 4.5. INDUSTRY CATEGORY ANALYSIS (EXACT from your notebook) - LAZY LOADED
-    st.markdown('<h2 class="section-header">Industry Category Analysis</h2>', unsafe_allow_html=True)
-    
-    # Use the main dataset for accurate industry analysis (same as other sections)
-    
-    # Use the filtered dataset to respect date range selection
-    # Need to copy because we'll be adding new columns (prod_descpt_code, sitc_category, industry_category)
-    df_full_industry = df_filtered.copy()
-    
-    # SITC Code-based Product Categorization - Clean presentation
-
-    # Ensure the expected code column exists; map from 'sitc_code' when available
-    if 'prod_descpt_code' not in df_full_industry.columns:
-        if 'sitc_code' in df_full_industry.columns:
-            df_full_industry['prod_descpt_code'] = df_full_industry['sitc_code'].astype(str)
-        else:
-            df_full_industry['prod_descpt_code'] = ''
-
-    # Import SITC mapping and create sitc_category column
-    try:
-        from sitc_mapping import SITC_MAPPING
-        
-        def get_sitc_section(sitc_code):
-            if pd.isna(sitc_code) or sitc_code == '':
-                return 'Other Commodities'
-            sitc_str = str(sitc_code).strip()
-            if len(sitc_str) >= 2:
-                section_code = sitc_str[:2]
-                return SITC_MAPPING.get(section_code, 'Other Commodities')
-            return 'Other Commodities'
-        
-        df_full_industry['sitc_category'] = df_full_industry['prod_descpt_code'].apply(get_sitc_section)
-        # Clean dashboard - no unnecessary text
-    except ImportError:
-        st.warning("SITC mapping module not found, using fallback categorization")
-        df_full_industry['sitc_category'] = 'Other Commodities'
-    
-    # Create Stakeholder-Friendly Industry Categories (EXACT from your notebook)
-    # Clean dashboard - no unnecessary text
-    
-    # Map SITC code to industry category using first digit
-    def get_industry_category(sitc_code):
-        if pd.isna(sitc_code) or sitc_code == '':
-            return 'Other Commodities'
-        first_digit = str(sitc_code).strip()[0] if len(str(sitc_code).strip()) >= 1 else '9'
-        mapping = {'0': 'Food & Agriculture', '1': 'Beverages & Tobacco', '2': 'Raw Materials & Mining', 
-                   '3': 'Energy & Petroleum', '4': 'Food Processing', '5': 'Chemicals & Pharmaceuticals',
-                   '6': 'Manufactured Goods and materials', '7': 'Machinery & Equipment', 
-                   '8': 'Consumer Goods', '9': 'Other Commodities'}
-        return mapping.get(first_digit, 'Other Commodities')
-    
-    df_full_industry['industry_category'] = df_full_industry['prod_descpt_code'].apply(get_industry_category)
-    # Clean dashboard - no unnecessary text
-    
-    # Analyze by industry category - process efficiently
-    industry_analysis = df_full_industry.groupby('industry_category').agg({
-        'value_fob_aud': ['sum', 'count', 'mean'],
-        'gross_weight_tonnes': 'sum',
-        'value_per_tonne': 'mean'
-    }).round(2)
-    
-    # Clean up df_full_industry immediately after aggregation
-    del df_full_industry
-    gc.collect()
-    
-    # Flatten column names
-    industry_analysis.columns = ['Total_Value', 'Shipment_Count', 'Avg_Value', 'Total_Weight', 'Avg_Value_per_Tonne']
-    industry_analysis = industry_analysis.sort_values('Total_Value', ascending=False)
-    
-    # Calculate percentages
-    total_value = industry_analysis['Total_Value'].sum()
-    industry_analysis['Value_Percentage'] = (industry_analysis['Total_Value'] / total_value * 100).round(1)
-    
-    # Clean presentation - show only visualizations
-    
-    # Create individual visualizations (separate charts)
-    plt.rcParams['figure.dpi'] = 80  # Standard DPI for individual charts
-    
-    # Chart 1: Industry Categories by Export Value (Horizontal Bar)
-    st.subheader("Australian Export Value by Industry Category")
-    
-    top_industries = industry_analysis.head(8).reset_index()
-    
-    # Add value labels with percentage
-    fig1 = px.bar(top_industries, x='Total_Value', y='industry_category',
-                  orientation='h',
-                  title='Australian Export Value by Industry Category',
-                  labels={'Total_Value': 'Export Value (AUD)', 'industry_category': 'Industry'},
-                  color='Total_Value',
-                  color_continuous_scale='viridis')
-    fig1.update_traces(
-        text=[f"${value/1e9:.1f}B<br>({pct:.1f}%)" for value, pct in zip(top_industries['Total_Value'], top_industries['Value_Percentage'])],
-        textposition='outside'
-    )
-    
-    fig1.update_layout(
-        title_font_size=16,
-        title_font_color='#2c3e50',
-        xaxis_title_font_size=14,
-        yaxis_title_font_size=14,
-        template='plotly_white',
-        height=600,
-        showlegend=False
-    )
-    fig1.update_yaxes(autorange="reversed")
-    fig1.update_xaxes(tickformat='$,.0f')
-    
-    # Update text positioning and styling
-    fig1.update_traces(
-        textposition='outside',
-        textfont=dict(size=10, color='#2c3e50'),
-        hovertemplate='<b>%{y}</b><br>Export Value: $%{x:,.0f}<br>Percentage: %{customdata:.1f}%<extra></extra>',
-        customdata=top_industries['Value_Percentage']
-    )
-    
-    st.plotly_chart(fig1)
-    
-    # Chart 2: Industry Value Density (Interactive) - EXACT from your notebook
-    st.subheader("Industry Value Density (Value per Tonne Shipped)")
-    
-    # Calculate ratio of totals (Total Value ÷ Total Weight) per industry - CORRECT method
-    industry_analysis['Value_per_Tonne_Ratio'] = industry_analysis['Total_Value'] / industry_analysis['Total_Weight']
-    value_density_industry = industry_analysis.sort_values('Value_per_Tonne_Ratio', ascending=False).reset_index()
-    
-    fig2 = px.bar(value_density_industry, x='industry_category', y='Value_per_Tonne_Ratio',
-                  title='Industry Value Density (Value per Tonne Shipped)',
-                  labels={'Value_per_Tonne_Ratio': 'Value per Tonne (AUD)', 'industry_category': 'Industry'},
-                  color='Value_per_Tonne_Ratio',
-                  color_continuous_scale='viridis')
-    fig2.update_traces(
-        text=[f"${value:,.0f}/tonne" for value in value_density_industry['Value_per_Tonne_Ratio']],
-        textposition='outside'
-    )
-    
-    fig2.update_layout(
-        title_font_size=16,
-        title_font_color='#2c3e50',
-        xaxis_title_font_size=14,
-        yaxis_title_font_size=14,
-        template='plotly_white',
-        height=600,
-        showlegend=False
-    )
-    fig2.update_xaxes(tickangle=45)
-    fig2.update_yaxes(tickformat='$,.0f')
-    
-    # Update text positioning and styling
-    fig2.update_traces(
-        textposition='outside',
-        textfont=dict(size=10, color='#2c3e50'),
-        hovertemplate='<b>%{x}</b><br>Value per Tonne: $%{y:,.0f}<extra></extra>'
-    )
-    
-    st.plotly_chart(fig2)
-    
-    # Chart 3: Dynamic Interactive Performance Summary Table
-    st.subheader("Industry Performance Summary Table")
-    
-    # Create a comprehensive industry performance table (without Value/Tonne) - Dynamic and updates with filters
-    table_data = industry_analysis[['Total_Value', 'Shipment_Count', 'Avg_Value', 'Value_Percentage']].copy()
-    
-    # Format the data for better readability
-    table_data['Total_Value_B'] = (table_data['Total_Value'] / 1e9).round(2)
-    table_data['Avg_Value_K'] = (table_data['Avg_Value'] / 1e3).round(0)
-    table_data['Shipment_Count_K'] = (table_data['Shipment_Count'] / 1e3).round(0)
-    
-    # Create display table with formatted columns (removed Value/Tonne)
-    display_table = pd.DataFrame({
-        'Industry': table_data.index,
-        'Total Value ($B)': table_data['Total_Value_B'],
-        'Market Share (%)': table_data['Value_Percentage'],
-        'Shipments (K)': table_data['Shipment_Count_K'],
-        'Avg Value/Shipment ($K)': table_data['Avg_Value_K']
-    })
-    
-    # Reset index to make Industry a regular column for better sorting/filtering
-    display_table = display_table.reset_index(drop=True)
-    
-    # Configure column display for responsive and dynamic table
-    column_config = {
-        "Industry": st.column_config.TextColumn(
-            "Industry",
-            help="Industry category name",
-            width="medium"
-        ),
-        "Total Value ($B)": st.column_config.NumberColumn(
-            "Total Value ($B)",
-            help="Total export value in billions of dollars",
-            format="%.2f",
-            width="small"
-        ),
-        "Market Share (%)": st.column_config.NumberColumn(
-            "Market Share (%)",
-            help="Percentage of total export value",
-            format="%.1f",
-            width="small"
-        ),
-        "Shipments (K)": st.column_config.NumberColumn(
-            "Shipments (K)",
-            help="Number of shipments in thousands",
-            format="%.0f",
-            width="small"
-        ),
-        "Avg Value/Shipment ($K)": st.column_config.NumberColumn(
-            "Avg Value/Shipment ($K)",
-            help="Average value per shipment in thousands of dollars",
-            format="%.0f",
-            width="small"
-        )
-    }
-    
-    # Display interactive table with sorting, filtering, and responsive design
-    st.dataframe(
-        display_table,
-        width='stretch',
-        hide_index=True,
-        column_config=column_config
-    )
-    
-    # Clean dashboard - no unnecessary text
-    
-    # 4.6. PRODUCT-MARKET ANALYSIS (EXACT from your notebook)
-    st.markdown('<h2 class="section-header">Product-Market Analysis</h2>', unsafe_allow_html=True)
-    
-    # Use filtered dataset for Product-Market Analysis - columns already exist (date and value_per_tonne already calculated)
-    df_full_product_market = df_filtered  # Use view to save memory
-    
-    # Function to format large numbers with proper suffixes
-    def format_number(value):
-        """Format numbers with B, M, K suffixes and appropriate decimal places"""
-        if value >= 1e9:
-            return f"{value/1e9:.2f}B"
-        elif value >= 1e6:
-            return f"{value/1e6:.2f}M"
-        elif value >= 1e3:
-            return f"{value/1e3:.2f}K"
-        else:
-            return f"{value:.2f}"
-    
-    # Clean presentation - show only visualizations
-    
-    # Calculate ALL data for visualizations - process efficiently before deleting
-    top_products = df_full_product_market.groupby('product_description').agg({
-        'value_fob_aud': 'sum',
-        'gross_weight_tonnes': 'sum',
-        'country_of_destination': 'nunique'
-    }).round(2)
-    
-    top_products.columns = ['Total_Value', 'Total_Weight', 'Countries_Served']
-    top_products = top_products.sort_values('Total_Value', ascending=False).head(10)
-    
-    top_countries = df_full_product_market.groupby('country_of_destination').agg({
-        'value_fob_aud': 'sum',
-        'gross_weight_tonnes': 'sum',
-        'product_description': 'nunique'
-    }).round(2)
-    
-    top_countries.columns = ['Total_Value', 'Total_Weight', 'Products_Imported']
-    top_countries = top_countries.sort_values('Total_Value', ascending=False).head(15)
-    
-    # Calculate product diversification BEFORE deleting df_full_product_market
-    country_product_diversity = df_full_product_market.groupby('country_of_destination').agg({
-        'value_fob_aud': 'sum',
-        'product_description': 'nunique'
-    }).round(2).reset_index()
-    
-    # NOW we can safely delete df_full_product_market
-    del df_full_product_market
-    gc.collect()
-    
-    # 4. PRODUCT-MARKET VISUALIZATIONS (Interactive Individual Charts)
-    
-    # 1. TOP PRODUCTS BY EXPORT VALUE (Interactive)
-    st.subheader("Top 10 Export Products by Value")
-    top_10_products = top_products.head(10).reset_index()
-    fig1 = px.bar(top_10_products, x='Total_Value', y='product_description',
-                  orientation='h',
-                  title='TOP 10 EXPORT PRODUCTS BY VALUE',
-                  labels={'Total_Value': 'Export Value (AUD)', 'product_description': 'Product'},
-                  color='Total_Value',
-                  color_continuous_scale='viridis')
-    fig1.update_layout(
-        title_font_size=16,
-        title_font_color='#2c3e50',
-        xaxis_title_font_size=14,
-        yaxis_title_font_size=14,
-        template='plotly_white',
-        height=600
-    )
-    fig1.update_yaxes(autorange="reversed")
-    fig1.update_xaxes(tickformat='$,.0f')
-    st.plotly_chart(fig1)
-    
-    # 2. TOP DESTINATION COUNTRIES (Interactive)
-    st.subheader("Top 10 Destination Countries")
-    top_10_countries = top_countries.head(10).reset_index()
-    fig2 = px.bar(top_10_countries, x='Total_Value', y='country_of_destination',
-                  orientation='h',
-                  title='TOP 10 DESTINATION COUNTRIES',
-                  labels={'Total_Value': 'Import Value (AUD)', 'country_of_destination': 'Country'},
-                  color='Total_Value',
-                  color_continuous_scale='plasma')
-    fig2.update_traces(
-        text=[f"${value/1e9:.1f}B" for value in top_10_countries['Total_Value']],
-        textposition='outside',
-        textfont=dict(size=10, color='#2c3e50'),
-        hovertemplate='<b>%{y}</b><br>Import Value: $%{x:,.0f}<extra></extra>'
-    )
-    fig2.update_layout(
-        title_font_size=16,
-        title_font_color='#2c3e50',
-        xaxis_title_font_size=14,
-        yaxis_title_font_size=14,
-        template='plotly_white',
-        height=600
-    )
-    fig2.update_yaxes(autorange="reversed")
-    fig2.update_xaxes(tickformat='$,.0f')
-    st.plotly_chart(fig2)
-    
-    # 3. PRODUCT DIVERSIFICATION BY COUNTRY (Interactive)
-    st.subheader("Product Diversification by Country")
-    # country_product_diversity already calculated above before deleting df_full_product_market
-    
-    fig3 = px.scatter(country_product_diversity, x='product_description', y='value_fob_aud',
-                      size='value_fob_aud',
-                      color='value_fob_aud',
-                      title='PRODUCT DIVERSIFICATION BY COUNTRY',
-                      labels={'product_description': 'Number of Products Imported', 'value_fob_aud': 'Total Import Value (AUD)'},
-                      hover_name='country_of_destination',
-                      color_continuous_scale='viridis')
-    fig3.update_layout(
-        title_font_size=16,
-        title_font_color='#2c3e50',
-        xaxis_title_font_size=14,
-        yaxis_title_font_size=14,
-        template='plotly_white',
-        height=600
-    )
-    fig3.update_yaxes(tickformat='$,.0f')
-    st.plotly_chart(fig3)
-    
-    # 4. MARKET CONCENTRATION ANALYSIS (Interactive)
-    st.subheader("Market Concentration Analysis")
-    # Top 10 countries market share
-    top_10_share = top_countries.head(10)['Total_Value']
-    others_share = top_countries.iloc[10:]['Total_Value'].sum()
-    market_share_data = list(top_10_share.values) + [others_share]
-    market_share_labels = list(top_10_share.index) + ['Others']
-    
-    market_share_df = pd.DataFrame({
-        'Country': market_share_labels,
-        'Value': market_share_data
-    })
-    
-    fig4 = px.pie(market_share_df, values='Value', names='Country',
-                   title='MARKET CONCENTRATION (Top 10 Countries vs Others)',
-                   color_discrete_sequence=px.colors.qualitative.Set3)
-    fig4.update_layout(
-        title_font_size=16,
-        title_font_color='#2c3e50',
-        template='plotly_white',
-        height=500
-    )
-    fig4.update_traces(textposition='inside', textinfo='percent+label')
-    st.plotly_chart(fig4)
-    
-    # Clean dashboard - no unnecessary text
-    
-    # 4.7. TOP 15 PORTS BY TONNAGE (EXACT from your notebook)
-    st.markdown('<h2 class="section-header">Top 15 Ports by Tonnage</h2>', unsafe_allow_html=True)
-    
-    # Use filtered dataset for Port Analysis - columns already exist (date and value_per_tonne already calculated)
-    df_full_ports = df_filtered  # Use view to save memory
-    
-    # Clean dashboard - no unnecessary text
-    
-    # Group by port of loading and calculate total tonnage
-    port_tonnage = df_full_ports.groupby('port_of_loading')['gross_weight_tonnes'].sum().reset_index()
-    
-    # Clean up df_full_ports immediately after aggregation
-    del df_full_ports
-    gc.collect()
-    
-    port_tonnage = port_tonnage.sort_values('gross_weight_tonnes', ascending=False)
-    port_tonnage['tonnage_millions'] = port_tonnage['gross_weight_tonnes'] / 1e6
-    top_15_ports = port_tonnage.head(15)
-    
-    # Clean dashboard - no unnecessary text
-    
-    # Create interactive lollipop chart
-    fig = go.Figure()
-    
-    # Add horizontal lines (sticks)
-    for i, (_, row) in enumerate(top_15_ports.iterrows()):
-        fig.add_trace(go.Scatter(
-            x=[0, row['tonnage_millions']],
-            y=[i, i],
-            mode='lines',
-            line=dict(color='gray', width=2),
-            showlegend=False,
-            hoverinfo='skip'
-        ))
-    
-    # Add dots (lollipops) at the end of each line
-    fig.add_trace(go.Scatter(
-        x=top_15_ports['tonnage_millions'],
-        y=list(range(len(top_15_ports))),
-        mode='markers',
-        marker=dict(
-            size=15,
-            color=top_15_ports['tonnage_millions'],
-            colorscale='viridis',
-            line=dict(color='black', width=1)
-        ),
-        text=[f"{port}<br>Tonnage: {tonnage:.1f}M tonnes" for port, tonnage in zip(top_15_ports['port_of_loading'], top_15_ports['tonnage_millions'])],
-        hovertemplate='%{text}<extra></extra>',
-        name='Ports'
-    ))
-    
-    # Update layout
-    fig.update_layout(
-        title='TOP 15 PORTS BY TONNAGE',
-        title_font_size=16,
-        title_font_color='#2c3e50',
-        xaxis_title='Tonnage (Million Tonnes)',
-        yaxis_title='Port',
-        xaxis_title_font_size=14,
-        yaxis_title_font_size=14,
-        template='plotly_white',
-        height=600,
-        yaxis=dict(
-            tickmode='array',
-            tickvals=list(range(len(top_15_ports))),
-            ticktext=top_15_ports['port_of_loading'].tolist(),
-            autorange="reversed"
-        ),
-        xaxis=dict(tickformat=',.1f'),
-        showlegend=False
-    )
-    
-    st.plotly_chart(fig)
-    
-    # 4.8. VOLUME VS VALUE ANALYSIS (EXACT from your notebook)
-    st.markdown('<h2 class="section-header">Volume vs Value Analysis</h2>', unsafe_allow_html=True)
-    
-    # Volume vs. Value Analysis by Product (EXACT from your notebook)
-    
-    # st.write("**=== VOLUME VS. VALUE ANALYSIS BY PRODUCT (INDUSTRY-IDENTIFIED) ===**")
-    
-    # Use filtered dataset for Volume vs Value Analysis
-    # Need to copy because we'll be adding new columns (prod_descpt_code, industry_category)
-    df_full_volume_value = df_filtered.copy()
-    
-    # Add industry category to full dataset
-    # Ensure code column exists for this section as well
-    if 'prod_descpt_code' not in df_full_volume_value.columns:
-        if 'sitc_code' in df_full_volume_value.columns:
-            df_full_volume_value['prod_descpt_code'] = df_full_volume_value['sitc_code'].astype(str)
-        else:
-            df_full_volume_value['prod_descpt_code'] = ''
-    def get_industry_category(sitc_code):
-        if pd.isna(sitc_code) or sitc_code == '':
-            return 'Other Commodities'
-        first_digit = str(sitc_code).strip()[0] if len(str(sitc_code).strip()) >= 1 else '9'
-        mapping = {'0': 'Food & Agriculture', '1': 'Beverages & Tobacco', '2': 'Raw Materials & Mining', 
-                   '3': 'Energy & Petroleum', '4': 'Food Processing', '5': 'Chemicals & Pharmaceuticals',
-                   '6': 'Manufactured Goods and materials', '7': 'Machinery & Equipment', 
-                   '8': 'Consumer Goods', '9': 'Other Commodities'}
-        return mapping.get(first_digit, 'Other Commodities')
-    
-    df_full_volume_value['industry_category'] = df_full_volume_value['prod_descpt_code'].apply(get_industry_category)
-    
-    # Calculate volume and value metrics for each product
-    product_analysis = df_full_volume_value.groupby('product_description').agg({
-        'value_fob_aud': 'sum',
-        'gross_weight_tonnes': 'sum',
-        'value_per_tonne': 'mean',
-        'industry_category': 'first'  # Get the industry category for each product
-    }).round(2)
-    
-    # Reset index to make product_description a column (not just an index)
-    product_analysis = product_analysis.reset_index()
-    
-    # Calculate additional metrics
-    shipment_counts = df_full_volume_value.groupby('product_description').size()
-    product_analysis['shipment_count'] = product_analysis['product_description'].map(shipment_counts).fillna(0)
-    product_analysis['avg_shipment_value'] = (product_analysis['value_fob_aud'] / product_analysis['shipment_count']).round(2)
-    product_analysis['avg_shipment_weight'] = (product_analysis['gross_weight_tonnes'] / product_analysis['shipment_count']).round(2)
-    
-    # Clean up df_full_volume_value immediately after aggregations
-    del df_full_volume_value, shipment_counts
-    gc.collect()
-    
-    # Sort by total value
-    product_analysis = product_analysis.sort_values('value_fob_aud', ascending=False)
-    
-    # Create volume and value percentiles for classification
-    product_analysis['volume_percentile'] = product_analysis['gross_weight_tonnes'].rank(pct=True) * 100
-    product_analysis['value_percentile'] = product_analysis['value_fob_aud'].rank(pct=True) * 100
-    product_analysis['shipment_count_percentile'] = product_analysis['shipment_count'].rank(pct=True) * 100
-    
-    # Classify products based on volume vs value (only High Volume-High Value and Low Volume-High Value)
-    def classify_product(row):
-        volume_pct = row['volume_percentile']
-        value_pct = row['value_percentile']
-        
-        if volume_pct >= 70 and value_pct >= 70:
-            return 'High Volume - High Value'
-        elif volume_pct <= 30 and value_pct >= 70:
-            return 'Low Volume - High Value'
-        else:
-            # Filter out High Volume-Low Value and Low Volume-Low Value
-            return None
-    
-    product_analysis['volume_value_category'] = product_analysis.apply(classify_product, axis=1)
-    
-    # Filter out None categories (High Volume-Low Value and Low Volume-Low Value)
-    product_analysis = product_analysis[product_analysis['volume_value_category'].notna()].copy()
-    
-    # Focus on interesting categories
-    low_volume_high_value = product_analysis[product_analysis['volume_value_category'] == 'Low Volume - High Value'].head(10)
-    high_volume_high_value = product_analysis[product_analysis['volume_value_category'] == 'High Volume - High Value'].head(10)
-    
-    # Clean presentation - show only visualizations
-    
-    # Define strategic categories with descriptive titles and colors (only two categories)
-    categories = {
-        'High Volume - High Value': ('#2E8B57', 'High Volume - High Value (Market Leaders)'),
-        'Low Volume - High Value': ('#4169E1', 'Low Volume - High Value (Premium Products)')
-    }
-    
-    # Create individual interactive charts for each strategic category
-    for category_name, (color, title) in categories.items():
-        st.subheader(f"{title}")
-        
-        # Get products in this category
-        category_products = product_analysis[product_analysis['volume_value_category'] == category_name]
-        
-        if len(category_products) > 0:
-            # Group by industry for cleaner visualization
-            industry_summary = category_products.groupby('industry_category').agg({
-                'value_fob_aud': 'sum',
-                'gross_weight_tonnes': 'sum'
-            }).round(2).reset_index()
-            
-            # Create interactive bar chart with short form value labels
-            def format_short_value(value):
-                if value >= 1e9:
-                    return f"${value/1e9:.1f}B"
-                elif value >= 1e6:
-                    return f"${value/1e6:.1f}M"
-                elif value >= 1e3:
-                    return f"${value/1e3:.1f}K"
-                else:
-                    return f"${value:.0f}"
-            
-            fig = px.bar(industry_summary, x='value_fob_aud', y='industry_category',
-                        orientation='h',
-                        title=title,
-                        labels={'value_fob_aud': 'Export Value (AUD)', 'industry_category': 'Industry'},
-                        color='value_fob_aud',
-                        color_continuous_scale=[(0, color), (1, color)])  # Use single color
-            fig.update_traces(
-                text=[format_short_value(value) for value in industry_summary['value_fob_aud']],
-                textposition='outside',
-                textfont=dict(size=10, color=color),
-                hovertemplate='<b>%{y}</b><br>Export Value: $%{x:,.0f}<extra></extra>'
-            )
-            
-            fig.update_layout(
-                title_font_size=16,
-                title_font_color=color,
-                xaxis_title_font_size=14,
-                yaxis_title_font_size=14,
-                template='plotly_white',
-                height=500,
-                showlegend=False
-            )
-            fig.update_yaxes(autorange="reversed")
-            fig.update_xaxes(tickformat='$,.0f')
-            
-            # Add summary information as annotation
-            total_value = category_products['value_fob_aud'].sum()
-            total_volume = category_products['gross_weight_tonnes'].sum()
-            product_count = len(category_products)
-            
-            # Format numbers
-            def format_number(value):
-                if value >= 1e9:
-                    return f"{value/1e9:.2f}B"
-                elif value >= 1e6:
-                    return f"{value/1e6:.2f}M"
-                elif value >= 1e3:
-                    return f"{value/1e3:.2f}K"
-                else:
-                    return f"{value:.2f}"
-            
-            def format_volume(value):
-                if value >= 1e9:
-                    return f"{value/1e9:.2f}B tonnes"
-                elif value >= 1e6:
-                    return f"{value/1e6:.2f}M tonnes"
-                elif value >= 1e3:
-                    return f"{value/1e3:.2f}K tonnes"
-                else:
-                    return f"{value:.2f} tonnes"
-            
-            # Add summary text
-            summary_text = f'Total Products: {product_count}<br>Total Value: ${format_number(total_value)}<br>Total Volume: {format_volume(total_volume)}'
-            fig.add_annotation(
-                text=summary_text,
-                xref="paper", yref="paper",
-                x=0.98, y=0.02,
-                showarrow=False,
-                font=dict(size=12, color=color),
-                bgcolor="white",
-                bordercolor=color,
-                borderwidth=1
-            )
-            
-            st.plotly_chart(fig)
-        else:
-            # No products in this category
-            st.info(f"No products found in the {category_name} category.")
-    
-    # Clean presentation - no unnecessary text
-    
-    # 5. STATE & TRANSPORT ANALYSIS (from your notebook Cells 13-16)
-    st.markdown('<h2 class="section-header">State & Transport Analysis</h2>', unsafe_allow_html=True)
-    
-    # State Analysis (from your notebook Cell 13)
-    states = df_filtered.groupby('state_of_origin')['value_fob_aud'].sum().sort_values(ascending=False)
-    states_pct = (states / states.sum() * 100).round(1)
-    
-    st.subheader("Export Value by State")
-    
-    # Clean dashboard - no unnecessary text
-    
-    # Create interactive state visualization with Plotly
-    states_sorted = states.sort_values(ascending=False)
-    states_pct_sorted = states_pct.reindex(states_sorted.index)
-    
-    # Prepare data for Plotly
-    states_df = pd.DataFrame({
-        'state': states_sorted.index,
-        'value_billions': states_sorted.values / 1e9,
-        'percentage': states_pct_sorted.values
-    })
-    
-    # Create interactive horizontal bar chart
-    fig = px.bar(states_df, x='value_billions', y='state',
-                 orientation='h',
-                 title='Export Value by State (2024-2025)',
-                 labels={'value_billions': 'Export Value (Billion AUD)', 'state': 'State'},
-                 color='value_billions',
-                 color_continuous_scale='viridis')
-    fig.update_traces(
-        text=[f"${value:.1f}B<br>({pct:.1f}%)" for value, pct in zip(states_df['value_billions'], states_df['percentage'])],
-        textposition='outside',
-        textfont=dict(size=10, color='#2c3e50'),
-        hovertemplate='<b>%{y}</b><br>Export Value: $%{x:.1f}B<br>Percentage: %{customdata:.1f}%<extra></extra>',
-        customdata=states_df['percentage']
-    )
-    
-    # Update layout for better presentation
-    fig.update_layout(
-        title_font_size=16,
-        title_font_color='#2c3e50',
-        xaxis_title_font_size=14,
-        yaxis_title_font_size=14,
-        template='plotly_white',
-        height=500,
-        showlegend=False
-    )
-    
-    # Update y-axis to show states in descending order (highest at top)
-    fig.update_yaxes(autorange="reversed")
-    
-    # Update x-axis formatting
-    fig.update_xaxes(tickformat='$,.1f')
-    
-    st.plotly_chart(fig)
-    
-    # Transport Mode Analysis (from your notebook Cell 15)
-    st.subheader("Export Value by Transport Mode")
-    
-    transport = df_filtered.groupby('mode_of_transport')['value_fob_aud'].sum().sort_values(ascending=False)
-    transport_pct = (transport / transport.sum() * 100)
-    
-    # Clean dashboard - no unnecessary text
-    
-    # Create interactive transport mode visualization with Plotly
-    transport_sorted = transport.sort_values(ascending=False)
-    transport_pct_sorted = transport_pct.reindex(transport_sorted.index)
-    
-    # Prepare data for Plotly
-    transport_df = pd.DataFrame({
-        'transport_mode': transport_sorted.index,
-        'value_billions': transport_sorted.values / 1e9,
-        'percentage': transport_pct_sorted.values
-    })
-    
-    # Create interactive vertical bar chart
-    fig = px.bar(transport_df, x='transport_mode', y='value_billions',
-                 title='Export Value by Transport Mode (2024-2025)',
-                 labels={'value_billions': 'Export Value (Billion AUD)', 'transport_mode': 'Transport Mode'},
-                 color='value_billions',
-                 color_continuous_scale='viridis')
-    fig.update_traces(
-        text=[f"${value:.1f}B<br>({pct:.1f}%)" for value, pct in zip(transport_df['value_billions'], transport_df['percentage'])],
-        textposition='outside',
-        textfont=dict(size=10, color='#2c3e50'),
-        hovertemplate='<b>%{x}</b><br>Export Value: $%{y:.1f}B<br>Percentage: %{customdata:.1f}%<extra></extra>',
-        customdata=transport_df['percentage']
-    )
-    
-    # Update layout for better presentation
-    fig.update_layout(
-        title_font_size=16,
-        title_font_color='#2c3e50',
-        xaxis_title_font_size=14,
-        yaxis_title_font_size=14,
-        template='plotly_white',
-        height=500,
-        showlegend=False
-    )
-    
-    # Update x-axis labels rotation
-    fig.update_xaxes(tickangle=15)
-    
-    # Update y-axis formatting
-    fig.update_yaxes(tickformat='$,.1f')
-    
-    st.plotly_chart(fig)
-    
-    # 6. CUSTOM ANALYSIS (from your notebook)
-    st.markdown('<h2 class="section-header">Custom Analysis</h2>', unsafe_allow_html=True)
-    
-    # Volume vs Value Analysis section removed as requested
-    
-    # Product Categories Analysis
-    st.subheader("Product Categories Analysis")
-    
-    # Calculate value per tonne for products
-    product_analysis = df_filtered.groupby('product_description').agg({
-        'value_fob_aud': 'sum',
-        'gross_weight_tonnes': 'sum'
-    }).reset_index()
-    
-    product_analysis['value_per_tonne'] = product_analysis['value_fob_aud'] / product_analysis['gross_weight_tonnes']
-    product_analysis = product_analysis.sort_values('value_per_tonne', ascending=False)
-    
-    # Clean presentation - visualizations show the data
-    
-    # 7. PORT ANALYSIS (from your notebook)
-    st.markdown('<h2 class="section-header">Port Analysis</h2>', unsafe_allow_html=True)
-    
-    # Top 15 ports by tonnage
-    st.subheader("Top 15 Ports by Tonnage")
-    
-    port_tonnage = df_filtered.groupby('port_of_loading')['gross_weight_tonnes'].sum().sort_values(ascending=False).head(15)
-    
-    # Create interactive lollipop chart
-    port_tonnage_df = port_tonnage.reset_index()
-    port_tonnage_df.columns = ['port_of_loading', 'gross_weight_tonnes']
-    
-    fig = px.bar(port_tonnage_df, x='gross_weight_tonnes', y='port_of_loading',
-                 orientation='h',
-                 title='Top 15 Ports by Tonnage',
-                 labels={'gross_weight_tonnes': 'Total Tonnage', 'port_of_loading': 'Port'},
-                 color='gross_weight_tonnes',
-                 color_continuous_scale='viridis')
-    fig.update_traces(
-        text=[f"{value/1e6:.1f}M" for value in port_tonnage_df['gross_weight_tonnes']],
-        textposition='outside',
-        textfont=dict(size=10, color='#2c3e50'),
-        hovertemplate='<b>%{y}</b><br>Total Tonnage: %{x:,.0f} tonnes<extra></extra>'
-    )
-    fig.update_layout(
-        title_font_size=16,
-        title_font_color='#2c3e50',
-        xaxis_title_font_size=14,
-        yaxis_title_font_size=14,
-        template='plotly_white',
-        height=600
-    )
-    fig.update_yaxes(autorange="reversed")
-    fig.update_xaxes(tickformat=',.0f')
-    st.plotly_chart(fig)
-    
-    # Port Efficiency Analysis (from your notebook) - Using FULL dataset for accuracy
-    st.subheader("Port Efficiency Analysis")
-    
-    # Use filtered dataset for accurate port analysis to respect date range selection
-    port_efficiency = df_filtered.groupby('port_of_loading').agg({
-        'value_fob_aud': 'sum',
-        'country_of_destination': 'count'
-    }).reset_index()
-    
-    port_efficiency = port_efficiency.rename(columns={'country_of_destination': 'shipment_count'})
-    
-    # Calculate key efficiency metrics
-    port_efficiency['avg_value_per_shipment'] = port_efficiency['value_fob_aud'] / port_efficiency['shipment_count']
-    port_efficiency['total_value_millions'] = port_efficiency['value_fob_aud'] / 1e6
-    port_efficiency['shipments_per_day'] = port_efficiency['shipment_count'] / 730  # 2 years of data
-    
-    # Filter for ports with significant activity (at least 50 shipments)
-    significant_ports = port_efficiency[port_efficiency['shipment_count'] >= 50].copy()
-    significant_ports = significant_ports.sort_values('avg_value_per_shipment', ascending=False)
-    
-    # High-value ports
-    # Clean presentation - visualizations show the data
-    
-    # Port Value Visualizations (Interactive)
-    st.subheader("Port Value Visualizations")
-    
-    # 1. TOP 15 HIGH-VALUE PORTS (Interactive)
-    top_15_high_value = significant_ports.head(15)
-    # Create short form value labels for high-value ports
-    def format_short_value(value):
-        if value >= 1e6:
-            return f"${value/1e6:.1f}M"
-        elif value >= 1e3:
-            return f"${value/1e3:.1f}K"
-        else:
-            return f"${value:.0f}"
-    
-    fig1 = px.bar(top_15_high_value, x='avg_value_per_shipment', y='port_of_loading',
-                  orientation='h',
-                  title='TOP 15 HIGH-VALUE PORTS (Average Value per Shipment)',
-                  labels={'avg_value_per_shipment': 'Average Value per Shipment ($)', 'port_of_loading': 'Port'},
-                  color='avg_value_per_shipment',
-                  color_continuous_scale='Greens',
-                  text=[format_short_value(value) for value in top_15_high_value['avg_value_per_shipment']])
-    fig1.update_layout(
-        title_font_size=16,
-        title_font_color='#2c3e50',
-        xaxis_title_font_size=14,
-        yaxis_title_font_size=14,
-        template='plotly_white',
-        height=600
-    )
-    fig1.update_yaxes(autorange="reversed")
-    fig1.update_xaxes(tickformat='$,.0f')
-    fig1.update_traces(
-        textposition='outside',
-        textfont=dict(size=10, color='#2c3e50'),
-        hovertemplate='<b>%{y}</b><br>Average Value per Shipment: $%{x:,.0f}<extra></extra>'
-    )
-    st.plotly_chart(fig1)
-    
-    # 2. LOWEST 15 VALUE PORTS (Interactive)
-    lowest_15_value = significant_ports.nsmallest(15, 'avg_value_per_shipment')
-    fig2 = px.bar(lowest_15_value, x='avg_value_per_shipment', y='port_of_loading',
-                  orientation='h',
-                  title='LOWEST 15 VALUE PORTS (Potential Congestion Risk)',
-                  labels={'avg_value_per_shipment': 'Average Value per Shipment ($)', 'port_of_loading': 'Port'},
-                  color='avg_value_per_shipment',
-                  color_continuous_scale='Reds',
-                  text=[format_short_value(value) for value in lowest_15_value['avg_value_per_shipment']])
-    fig2.update_layout(
-        title_font_size=16,
-        title_font_color='#2c3e50',
-        xaxis_title_font_size=14,
-        yaxis_title_font_size=14,
-        template='plotly_white',
-        height=600
-    )
-    fig2.update_yaxes(autorange="reversed")
-    fig2.update_xaxes(tickformat='$,.0f')
-    fig2.update_traces(
-        textposition='outside',
-        textfont=dict(size=10, color='#2c3e50'),
-        hovertemplate='<b>%{y}</b><br>Average Value per Shipment: $%{x:,.0f}<extra></extra>'
-    )
-    st.plotly_chart(fig2)
-    
-    # 8. REGIONAL ANALYSIS (EXACT from your notebook) - Using FULL dataset
-    st.markdown('<h2 class="section-header">Regional Analysis</h2>', unsafe_allow_html=True)
-    
-    # Use filtered dataset for accurate regional analysis to respect date range selection
-    # Need to copy because we'll be adding new columns (region)
-    df_full = df_filtered.copy()
-    
-    # Add calculated fields only if they don't already exist (they should from initial load)
-    if 'date' not in df_full.columns:
-        df_full['date'] = pd.to_datetime(df_full['year'].astype(str) + '-' + df_full['month_number'].astype(str).str.zfill(2) + '-01')
-    if 'value_per_tonne' not in df_full.columns:
-        df_full['value_per_tonne'] = df_full['value_fob_aud'] / df_full['gross_weight_tonnes']
-    
-    # EXACT CODE FROM YOUR NOTEBOOK - Regional Mapping using region_mapping.py
-    try:
-        from region_mapping import add_region_to_dataframe
-        # Add region column to existing dataframe
-        df_full = add_region_to_dataframe(df_full, 'country_of_destination', 'region')
-    except ImportError:
-        # Fallback if region_mapping.py is not available
-        def get_region(country):
-            asia_pacific = ['China', 'Japan', 'Korea, Republic of (South)', 'Singapore', 'India', 'Taiwan', 
-                           'Indonesia', 'Malaysia', 'Hong Kong', 'Vietnam', 'Thailand', 'Philippines']
-            europe = ['United Kingdom, Channel Islands and Isle of Man, nfd', 'Germany', 'France', 'Italy']
-            americas = ['United States of America', 'Canada', 'Brazil', 'Mexico']
-            middle_east = ['United Arab Emirates', 'Saudi Arabia', 'Turkey']
-            
-            if country in asia_pacific:
-                return 'Asia-Pacific'
-            elif country in europe:
-                return 'Europe'
-            elif country in americas:
-                return 'Americas'
-            elif country in middle_east:
-                return 'Middle East'
-            else:
-                return 'Other'
-        
-        # Add region column
-        df_full['region'] = df_full['country_of_destination'].apply(get_region)
-    
-    # Check which countries are mapped to "Other" (EXACT from your notebook)
-    other_countries = df_full[df_full['region'] == 'Other']['country_of_destination'].unique()
-    # Clean dashboard - no unnecessary text
-    
-    # 2. REGIONAL EXPORT SHARE ANALYSIS (EXACT from your notebook)
-    regional_analysis = df_full.groupby('region')['value_fob_aud'].sum().reset_index()
-    regional_analysis['value_billions'] = regional_analysis['value_fob_aud'] / 1e9
-    regional_analysis['market_share_pct'] = (regional_analysis['value_fob_aud'] / regional_analysis['value_fob_aud'].sum()) * 100
-    
-    # Sort by market share
-    regional_analysis = regional_analysis.sort_values('market_share_pct', ascending=False)
-    
-    # 3. COMBINE SMALL REGIONS WITH MAIN "OTHER" CATEGORY (EXACT from your notebook)
-    small_regions = regional_analysis[regional_analysis['market_share_pct'] <= 1.0]
-    other_mask = regional_analysis['region'] == 'Other'
-    
-    if other_mask.any() and len(small_regions) > 0:
-        # Add small regions to the main "Other" category
-        regional_analysis.loc[other_mask, 'market_share_pct'] += small_regions['market_share_pct'].sum()
-        regional_analysis.loc[other_mask, 'value_fob_aud'] += small_regions['value_fob_aud'].sum()
-        regional_analysis.loc[other_mask, 'value_billions'] = regional_analysis.loc[other_mask, 'value_fob_aud'] / 1e9
-        
-        # Remove small regions from the data
-        regional_analysis = regional_analysis[~regional_analysis.index.isin(small_regions.index)]
-        
-        # Clean dashboard - no unnecessary text
-    
-    # Re-sort after combining
-    regional_analysis = regional_analysis.sort_values('market_share_pct', ascending=False)
-    
-    # Clean dashboard - no unnecessary text
-    
-    # 4. REGIONAL VISUALIZATIONS (Interactive) - EXACT from your notebook
-    st.subheader("Regional Visualizations")
-    
-    # 4.1 Regional Market Share Pie Chart (Interactive)
-    fig1 = px.pie(regional_analysis, values='market_share_pct', names='region',
-                  title='Australian Export Share by Region (Combined Other Categories)',
-                  color_discrete_sequence=px.colors.qualitative.Set3)
-    fig1.update_layout(
-        title_font_size=16,
-        title_font_color='#2c3e50',
-        template='plotly_white',
-        height=500
-    )
-    fig1.update_traces(textposition='inside', textinfo='percent+label')
-    st.plotly_chart(fig1)
-    
-    # 4.2 Regional Value Comparison Bar Chart (Interactive)
-    fig2 = px.bar(regional_analysis, x='region', y='value_billions',
-                  title='Export Value by Region (Billions AUD)',
-                  labels={'value_billions': 'Export Value (Billions AUD)', 'region': 'Region'},
-                  color='value_billions',
-                  color_continuous_scale='viridis',
-                  text=[f"${value:.1f}B" for value in regional_analysis['value_billions']])
-    fig2.update_layout(
-        title_font_size=16,
-        title_font_color='#2c3e50',
-        xaxis_title_font_size=14,
-        yaxis_title_font_size=14,
-        template='plotly_white',
-        height=500
-    )
-    fig2.update_xaxes(tickangle=45)
-    fig2.update_yaxes(tickformat='$,.1f')
-    fig2.update_traces(
-        textposition='outside',
-        textfont=dict(size=12, color='#2c3e50'),
-        hovertemplate='<b>%{x}</b><br>Export Value: $%{y:.1f}B<extra></extra>'
-    )
-    st.plotly_chart(fig2)
-    
-    # Clean dashboard - no unnecessary text
-    
-    # 9. GROWING & DECLINING MARKETS ANALYSIS (EXACT from your notebook)
-    try:
-        st.markdown('<h2 class="section-header">Growing & Declining Markets Analysis</h2>', unsafe_allow_html=True)
-        
-        # Clean presentation - show only visualizations
-        
-        # Filter for Q1 months (January, February, March, April)
-        # Handle different month column formats
-        if 'month' in df_filtered.columns:
-            # If month column contains full date strings like "January 2024", extract just the month name
-            if df_filtered['month'].dtype == 'object':
-                month_names = df_filtered['month'].astype(str).str.split().str[0]
-                q1_months = ['January', 'February', 'March', 'April']
-                df_q1 = df_filtered[month_names.isin(q1_months)].copy()
-            else:
-                # If month is already just month names
-                q1_months = ['January', 'February', 'March', 'April']
-                df_q1 = df_filtered[df_filtered['month'].isin(q1_months)].copy()
-        elif 'month_number' in df_filtered.columns:
-            # If only month_number exists, filter for Q1 (months 1-4)
-            df_q1 = df_filtered[df_filtered['month_number'].isin([1, 2, 3, 4])].copy()
-        else:
-            df_q1 = pd.DataFrame()
-            st.warning("Month information not available for Q1 filtering.")
-        
-        if len(df_q1) > 0 and 'year' in df_q1.columns and 'country_of_destination' in df_q1.columns:
-            # Ensure year is numeric for proper grouping
-            df_q1['year'] = pd.to_numeric(df_q1['year'], errors='coerce')
-            
-            # Calculate export values by country and year for Q1 only
-            country_yearly = df_q1.groupby(['country_of_destination', 'year'])['value_fob_aud'].sum().unstack(fill_value=0)
-            
-            # Convert year columns to numeric if they're strings
-            country_yearly.columns = pd.to_numeric(country_yearly.columns, errors='coerce')
-            
-            # Calculate YoY growth
-            if 2024 in country_yearly.columns and 2025 in country_yearly.columns:
-                # Handle division by zero
-                country_yearly = country_yearly[country_yearly[2024] > 0].copy()  # Remove countries with zero 2024 value
-                
-                country_yearly['YoY_Growth_%'] = ((country_yearly[2025] - country_yearly[2024]) / country_yearly[2024] * 100).round(2)
-                country_yearly['YoY_Growth_Absolute'] = (country_yearly[2025] - country_yearly[2024]) / 1e9  # in billions
-                country_yearly['Q1_2024_Value'] = country_yearly[2024] / 1e9  # in billions
-                country_yearly['Q1_2025_Value'] = country_yearly[2025] / 1e9  # in billions
-                
-                # Filter countries with significant trade volume (at least $100M in Q1 2024)
-                significant_countries = country_yearly[country_yearly[2024] >= 1e8].copy()  # $100M threshold
-                
-                if len(significant_countries) > 0:
-                    # Sort by YoY growth
-                    significant_countries = significant_countries.sort_values('YoY_Growth_%', ascending=False)
-                    
-                    # Clean presentation - show only visualizations
-                    
-                    # 6.1 Top 15 Growing Markets (Interactive)
-                    top_growing = significant_countries.head(15).reset_index()
-                    fig1 = px.bar(top_growing, x='YoY_Growth_%', y='country_of_destination',
-                                  orientation='h',
-                                  title='Top 15 Growing Markets (Q1 2024 → Q1 2025)',
-                                  labels={'YoY_Growth_%': 'YoY Growth (%)', 'country_of_destination': 'Country'},
-                                  color='YoY_Growth_%',
-                                  color_continuous_scale='viridis',
-                                  text=[f"{value:.1f}%" for value in top_growing['YoY_Growth_%']])
-                    fig1.update_layout(
-                        title_font_size=16,
-                        title_font_color='#2c3e50',
-                        xaxis_title_font_size=14,
-                        yaxis_title_font_size=14,
-                        template='plotly_white',
-                        height=600
-                    )
-                    fig1.update_yaxes(autorange="reversed")
-                    fig1.add_vline(x=0, line_dash="dash", line_color="black", opacity=0.3)
-                    fig1.update_traces(
-                        textposition='outside',
-                        textfont=dict(size=10, color='#2c3e50'),
-                        hovertemplate='<b>%{y}</b><br>YoY Growth: %{x:.1f}%<extra></extra>'
-                    )
-                    st.plotly_chart(fig1)
-                    
-                    # 6.2 Top 15 Declining Markets (Interactive)
-                    top_declining = significant_countries.tail(15).reset_index()
-                    fig2 = px.bar(top_declining, x='YoY_Growth_%', y='country_of_destination',
-                                  orientation='h',
-                                  title='Top 15 Declining Markets (Q1 2024 → Q1 2025)',
-                                  labels={'YoY_Growth_%': 'YoY Growth (%)', 'country_of_destination': 'Country'},
-                                  color='YoY_Growth_%',
-                                  color_continuous_scale='plasma',
-                                  text=[f"{value:.1f}%" for value in top_declining['YoY_Growth_%']])
-                    fig2.update_layout(
-                        title_font_size=16,
-                        title_font_color='#2c3e50',
-                        xaxis_title_font_size=14,
-                        yaxis_title_font_size=14,
-                        template='plotly_white',
-                        height=600
-                    )
-                    fig2.update_yaxes(autorange="reversed")
-                    fig2.add_vline(x=0, line_dash="dash", line_color="black", opacity=0.3)
-                    fig2.update_traces(
-                        textposition='outside',
-                        textfont=dict(size=10, color='#2c3e50'),
-                        hovertemplate='<b>%{y}</b><br>YoY Growth: %{x:.1f}%<extra></extra>'
-                    )
-                    st.plotly_chart(fig2)
-                else:
-                    st.warning("No countries meet the significant trade volume threshold ($100M in Q1 2024) for growth analysis.")
-            else:
-                st.warning("Data for both 2024 and 2025 Q1 periods is required for YoY growth analysis. Current data may only cover one year.")
-        else:
-            st.warning("Insufficient data available for Q1 analysis. Please check your date range filters.")
-    except Exception as e:
-        st.error(f"Error in Growing & Declining Markets Analysis: {str(e)}")
-        import traceback
-        st.code(traceback.format_exc())
-    
-    # 10. YEAR-OVER-YEAR GROWTH ANALYSIS (YEAR TO DATE)
-    try:
-        st.markdown('<h2 class="section-header">Year-over-Year Growth Analysis (Year to Date)</h2>', unsafe_allow_html=True)
-        
-        # Use filtered dataset for whole year analysis
-        if 'year' in df_filtered.columns and 'country_of_destination' in df_filtered.columns:
-            # Ensure year is numeric for proper grouping
-            df_yoy = df_filtered.copy()
-            df_yoy['year'] = pd.to_numeric(df_yoy['year'], errors='coerce')
-            
-            # Calculate export values by country and year (whole year, not just Q1)
-            country_yearly = df_yoy.groupby(['country_of_destination', 'year'])['value_fob_aud'].sum().unstack(fill_value=0)
-            
-            # Convert year columns to numeric if they're strings
-            country_yearly.columns = pd.to_numeric(country_yearly.columns, errors='coerce')
-            
-            # Calculate YoY growth
-            if 2024 in country_yearly.columns and 2025 in country_yearly.columns:
-                # Handle division by zero - remove countries with zero 2024 value
-                country_yearly = country_yearly[country_yearly[2024] > 0].copy()
-                
-                country_yearly['YoY_Growth_%'] = ((country_yearly[2025] - country_yearly[2024]) / country_yearly[2024] * 100).round(2)
-                country_yearly['YoY_Growth_Absolute'] = (country_yearly[2025] - country_yearly[2024]) / 1e9  # in billions
-                country_yearly['Value_2024'] = country_yearly[2024] / 1e9  # in billions
-                country_yearly['Value_2025'] = country_yearly[2025] / 1e9  # in billions
-                
-                # Filter countries with significant trade volume (at least $1B in 2024)
-                significant_countries = country_yearly[country_yearly[2024] >= 1e9].copy()  # $1B threshold
-                
-                if len(significant_countries) > 0:
-                    # Sort by YoY growth
-                    significant_countries = significant_countries.sort_values('YoY_Growth_%', ascending=False)
-                    
-                    # Prepare data for top 10 growing markets
-                    top_growing = significant_countries.head(10).reset_index()
-                    top_growing = top_growing.sort_values('YoY_Growth_%', ascending=True)  # Sort ascending for horizontal bar chart
-                    
-                    # Prepare data for top 10 declining markets
-                    top_declining = significant_countries.tail(10).reset_index()
-                    top_declining = top_declining.sort_values('YoY_Growth_%', ascending=True)  # Sort ascending for horizontal bar chart
-                    
-                    # Chart 1: Top 10 Growing Markets (Whole Year)
-                    fig1 = px.bar(
-                        top_growing, 
-                        x='YoY_Growth_%', 
-                        y='country_of_destination',
-                        orientation='h',
-                        title='Top 10 Growing Markets (2024 → 2025)<br><sub>Year to Date</sub>',
-                        labels={'YoY_Growth_%': 'YoY Growth (%)', 'country_of_destination': 'Country'},
-                        color='YoY_Growth_%',
-                        color_continuous_scale='Greens',
-                        text=[f"{value:.1f}%" for value in top_growing['YoY_Growth_%']]
-                    )
-                    fig1.update_layout(
-                        title_font_size=16,
-                        title_font_color='#2c3e50',
-                        xaxis_title_font_size=14,
-                        yaxis_title_font_size=12,
-                        template='plotly_white',
-                        height=600,
-                        showlegend=False,
-                        margin=dict(l=10, r=10, t=80, b=10)
-                    )
-                    fig1.update_yaxes(autorange="reversed")
-                    fig1.add_vline(x=0, line_dash="dash", line_color="black", opacity=0.3)
-                    fig1.update_traces(
-                        textposition='outside',
-                        textfont=dict(size=10, color='#2c3e50'),
-                        hovertemplate='<b>%{y}</b><br>YoY Growth: %{x:.1f}%<br>2024: $%{customdata[2]:.2f}B<br>2025: $%{customdata[3]:.2f}B<br>Change: $%{customdata[1]:.2f}B<extra></extra>',
-                        customdata=top_growing[['YoY_Growth_%', 'YoY_Growth_Absolute', 'Value_2024', 'Value_2025']].values
-                    )
-                    st.plotly_chart(fig1, width='stretch')
-                    
-                    # Chart 2: Top 10 Declining Markets (Whole Year)
-                    fig2 = px.bar(
-                        top_declining, 
-                        x='YoY_Growth_%', 
-                        y='country_of_destination',
-                        orientation='h',
-                        title='Top 10 Declining Markets (2024 → 2025)<br><sub>Year to Date</sub>',
-                        labels={'YoY_Growth_%': 'YoY Growth (%)', 'country_of_destination': 'Country'},
-                        color='YoY_Growth_%',
-                        color_continuous_scale='Reds',
-                        text=[f"{value:.1f}%" for value in top_declining['YoY_Growth_%']]
-                    )
-                    fig2.update_layout(
-                        title_font_size=16,
-                        title_font_color='#2c3e50',
-                        xaxis_title_font_size=14,
-                        yaxis_title_font_size=12,
-                        template='plotly_white',
-                        height=600,
-                        showlegend=False,
-                        margin=dict(l=10, r=10, t=80, b=10)
-                    )
-                    fig2.update_yaxes(autorange="reversed")
-                    fig2.add_vline(x=0, line_dash="dash", line_color="black", opacity=0.3)
-                    fig2.update_traces(
-                        textposition='outside',
-                        textfont=dict(size=10, color='#2c3e50'),
-                        hovertemplate='<b>%{y}</b><br>YoY Growth: %{x:.1f}%<br>2024: $%{customdata[2]:.2f}B<br>2025: $%{customdata[3]:.2f}B<br>Change: $%{customdata[1]:.2f}B<extra></extra>',
-                        customdata=top_declining[['YoY_Growth_%', 'YoY_Growth_Absolute', 'Value_2024', 'Value_2025']].values
-                    )
-                    st.plotly_chart(fig2, width='stretch')
-                    
-                    # Clean up
-                    del df_yoy, country_yearly, significant_countries, top_growing, top_declining
-                    gc.collect()
-                else:
-                    st.warning("No countries meet the significant trade volume threshold ($1B in 2024) for whole year growth analysis.")
-            else:
-                st.warning("Data for both 2024 and 2025 periods is required for YoY growth analysis. Current data may only cover one year.")
-        else:
-            st.warning("Insufficient data available for year to date analysis. Please check your date range filters.")
-    except Exception as e:
-        st.error(f"Error in Year-over-Year Growth Analysis (Year to Date): {str(e)}")
-        import traceback
-        st.code(traceback.format_exc())
-    
-    # 11. EXECUTIVE SUMMARY (from your notebook Cell 22)
-    try:
-        st.markdown('<h2 class="section-header">Executive Summary</h2>', unsafe_allow_html=True)
-        
-        # Generate executive summary report (from your notebook)
-        st.markdown("""
-        <div class="summary-box">
-            <h3>EXECUTIVE SUMMARY - AUSTRALIAN FREIGHT EXPORTS 2024-2025</h3>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        # Calculate top countries for Executive Summary (if not already available)
+        # 10. YEAR-OVER-YEAR GROWTH ANALYSIS (YEAR TO DATE)
         try:
-            top_countries_summary = df_filtered.groupby('country_of_destination').agg({
-                'value_fob_aud': 'sum'
-            }).sort_values('value_fob_aud', ascending=False)
-            top_countries_summary.columns = ['Total_Value']
-        except Exception:
-            top_countries_summary = None
+            st.markdown('<h2 class="section-header">Year-over-Year Growth Analysis (Year to Date)</h2>', unsafe_allow_html=True)
         
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.subheader("Overview")
-            st.write(f"Total Export Value: ${accurate_kpis.get('total_value', 0)/1e9:.2f}B")
-            st.write(f"Total Shipments: {accurate_kpis.get('total_records', 0):,}")
-            st.write(f"Total Weight: {accurate_kpis.get('total_weight', 0)/1e6:.2f}M tonnes")
-        
-        with col2:
-            st.subheader("Top 3 Destinations")
-            if top_countries_summary is not None and len(top_countries_summary) > 0:
-                for i, (country, row) in enumerate(top_countries_summary.head(3).iterrows(), 1):
-                    value = row['Total_Value']
-                    st.write(f"{i}. {country}: ${value/1e9:.2f}B")
+            # Use filtered dataset for whole year analysis
+            if 'year' in df_filtered.columns and 'country_of_destination' in df_filtered.columns:
+                # Ensure year is numeric for proper grouping
+                df_yoy = df_filtered.copy()
+                df_yoy['year'] = pd.to_numeric(df_yoy['year'], errors='coerce')
+            
+                # Calculate export values by country and year (whole year, not just Q1)
+                country_yearly = df_yoy.groupby(['country_of_destination', 'year'])['value_fob_aud'].sum().unstack(fill_value=0)
+            
+                # Convert year columns to numeric if they're strings
+                country_yearly.columns = pd.to_numeric(country_yearly.columns, errors='coerce')
+            
+                # Calculate YoY growth
+                if 2024 in country_yearly.columns and 2025 in country_yearly.columns:
+                    # Handle division by zero - remove countries with zero 2024 value
+                    country_yearly = country_yearly[country_yearly[2024] > 0].copy()
+                
+                    country_yearly['YoY_Growth_%'] = ((country_yearly[2025] - country_yearly[2024]) / country_yearly[2024] * 100).round(2)
+                    country_yearly['YoY_Growth_Absolute'] = (country_yearly[2025] - country_yearly[2024]) / 1e9  # in billions
+                    country_yearly['Value_2024'] = country_yearly[2024] / 1e9  # in billions
+                    country_yearly['Value_2025'] = country_yearly[2025] / 1e9  # in billions
+                
+                    # Filter countries with significant trade volume (at least $1B in 2024)
+                    significant_countries = country_yearly[country_yearly[2024] >= 1e9].copy()  # $1B threshold
+                
+                    if len(significant_countries) > 0:
+                        # Sort by YoY growth
+                        significant_countries = significant_countries.sort_values('YoY_Growth_%', ascending=False)
+                    
+                        # Prepare data for top 10 growing markets
+                        top_growing = significant_countries.head(10).reset_index()
+                        top_growing = top_growing.sort_values('YoY_Growth_%', ascending=True)  # Sort ascending for horizontal bar chart
+                    
+                        # Prepare data for top 10 declining markets
+                        top_declining = significant_countries.tail(10).reset_index()
+                        top_declining = top_declining.sort_values('YoY_Growth_%', ascending=True)  # Sort ascending for horizontal bar chart
+                    
+                        # Chart 1: Top 10 Growing Markets (Whole Year)
+                        fig1 = px.bar(
+                            top_growing, 
+                            x='YoY_Growth_%', 
+                            y='country_of_destination',
+                            orientation='h',
+                            title='Top 10 Growing Markets (2024 → 2025)<br><sub>Year to Date</sub>',
+                            labels={'YoY_Growth_%': 'YoY Growth (%)', 'country_of_destination': 'Country'},
+                            color='YoY_Growth_%',
+                            color_continuous_scale='Greens',
+                            text=[f"{value:.1f}%" for value in top_growing['YoY_Growth_%']]
+                        )
+                        fig1.update_layout(
+                            title_font_size=16,
+                            title_font_color='#2c3e50',
+                            xaxis_title_font_size=14,
+                            yaxis_title_font_size=12,
+                            template='plotly_white',
+                            height=600,
+                            showlegend=False,
+                            margin=dict(l=10, r=10, t=80, b=10)
+                        )
+                        fig1.update_yaxes(autorange="reversed")
+                        fig1.add_vline(x=0, line_dash="dash", line_color="black", opacity=0.3)
+                        fig1.update_traces(
+                            textposition='outside',
+                            textfont=dict(size=10, color='#2c3e50'),
+                            hovertemplate='<b>%{y}</b><br>YoY Growth: %{x:.1f}%<br>2024: $%{customdata[2]:.2f}B<br>2025: $%{customdata[3]:.2f}B<br>Change: $%{customdata[1]:.2f}B<extra></extra>',
+                            customdata=top_growing[['YoY_Growth_%', 'YoY_Growth_Absolute', 'Value_2024', 'Value_2025']].values
+                        )
+                        st.plotly_chart(fig1, width='stretch')
+                    
+                        # Chart 2: Top 10 Declining Markets (Whole Year)
+                        fig2 = px.bar(
+                            top_declining, 
+                            x='YoY_Growth_%', 
+                            y='country_of_destination',
+                            orientation='h',
+                            title='Top 10 Declining Markets (2024 → 2025)<br><sub>Year to Date</sub>',
+                            labels={'YoY_Growth_%': 'YoY Growth (%)', 'country_of_destination': 'Country'},
+                            color='YoY_Growth_%',
+                            color_continuous_scale='Reds',
+                            text=[f"{value:.1f}%" for value in top_declining['YoY_Growth_%']]
+                        )
+                        fig2.update_layout(
+                            title_font_size=16,
+                            title_font_color='#2c3e50',
+                            xaxis_title_font_size=14,
+                            yaxis_title_font_size=12,
+                            template='plotly_white',
+                            height=600,
+                            showlegend=False,
+                            margin=dict(l=10, r=10, t=80, b=10)
+                        )
+                        fig2.update_yaxes(autorange="reversed")
+                        fig2.add_vline(x=0, line_dash="dash", line_color="black", opacity=0.3)
+                        fig2.update_traces(
+                            textposition='outside',
+                            textfont=dict(size=10, color='#2c3e50'),
+                            hovertemplate='<b>%{y}</b><br>YoY Growth: %{x:.1f}%<br>2024: $%{customdata[2]:.2f}B<br>2025: $%{customdata[3]:.2f}B<br>Change: $%{customdata[1]:.2f}B<extra></extra>',
+                            customdata=top_declining[['YoY_Growth_%', 'YoY_Growth_Absolute', 'Value_2024', 'Value_2025']].values
+                        )
+                        st.plotly_chart(fig2, width='stretch')
+                    
+                        # Clean up
+                        del df_yoy, country_yearly, significant_countries, top_growing, top_declining
+                        gc.collect()
+                    else:
+                        st.warning("No countries meet the significant trade volume threshold ($1B in 2024) for whole year growth analysis.")
+                else:
+                    st.warning("Data for both 2024 and 2025 periods is required for YoY growth analysis. Current data may only cover one year.")
             else:
-                st.write("Data not available")
+                st.warning("Insufficient data available for year to date analysis. Please check your date range filters.")
+        except Exception as e:
+            st.error(f"Error in Year-over-Year Growth Analysis (Year to Date): {str(e)}")
+            import traceback
+            st.code(traceback.format_exc())
+    
+        # 11. EXECUTIVE SUMMARY (from your notebook Cell 22)
+        try:
+            st.markdown('<h2 class="section-header">Executive Summary</h2>', unsafe_allow_html=True)
         
-        # Clean up
-        del top_countries_summary
+            # Generate executive summary report (from your notebook)
+            st.markdown("""
+            <div class="summary-box">
+                <h3>EXECUTIVE SUMMARY - AUSTRALIAN FREIGHT EXPORTS 2024-2025</h3>
+            </div>
+            """, unsafe_allow_html=True)
+        
+            # Calculate top countries for Executive Summary (if not already available)
+            try:
+                top_countries_summary = df_filtered.groupby('country_of_destination').agg({
+                    'value_fob_aud': 'sum'
+                }).sort_values('value_fob_aud', ascending=False)
+                top_countries_summary.columns = ['Total_Value']
+            except Exception:
+                top_countries_summary = None
+        
+            col1, col2 = st.columns(2)
+        
+            with col1:
+                st.subheader("Overview")
+                st.write(f"Total Export Value: ${accurate_kpis.get('total_value', 0)/1e9:.2f}B")
+                st.write(f"Total Shipments: {accurate_kpis.get('total_records', 0):,}")
+                st.write(f"Total Weight: {accurate_kpis.get('total_weight', 0)/1e6:.2f}M tonnes")
+        
+            with col2:
+                st.subheader("Top 3 Destinations")
+                if top_countries_summary is not None and len(top_countries_summary) > 0:
+                    for i, (country, row) in enumerate(top_countries_summary.head(3).iterrows(), 1):
+                        value = row['Total_Value']
+                        st.write(f"{i}. {country}: ${value/1e9:.2f}B")
+                else:
+                    st.write("Data not available")
+        
+            # Clean up
+            del top_countries_summary
+            gc.collect()
+        except Exception as e:
+            st.error(f"Error in Executive Summary: {str(e)}")
+            import traceback
+            st.code(traceback.format_exc())
+        
+        # Footer (always show, even if Executive Summary had errors)
+        st.markdown("---")
+        st.markdown("**Australian Freight Export Analysis Dashboard** | **Data Source:** Australian Bureau of Statistics | **Last Updated:** " + datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        
+        # Final memory cleanup
         gc.collect()
     except Exception as e:
-        st.error(f"Error in Executive Summary: {str(e)}")
+        st.error(f"Critical dashboard error: {str(e)}")
         import traceback
         st.code(traceback.format_exc())
-    
-    # Footer
-    st.markdown("---")
-    st.markdown("**Australian Freight Export Analysis Dashboard** | **Data Source:** Australian Bureau of Statistics | **Last Updated:** " + datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-    
-    # Final memory cleanup
-    gc.collect()
+        st.warning("Some sections may not have loaded. Try refreshing the page or clearing the cache.")
+        # Footer even on error
+        st.markdown("---")
+        st.markdown("**Australian Freight Export Analysis Dashboard** | **Data Source:** Australian Bureau of Statistics")
+        gc.collect()
 
 else:
     st.error("Unable to load data. Please check your data file and try again.")
