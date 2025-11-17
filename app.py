@@ -869,8 +869,11 @@ if df is not None and accurate_kpis is not None:
             </div>
             """, unsafe_allow_html=True)
     
-        # Force cleanup after overview
-        gc.collect()
+        # Force cleanup after overview - wrapped to prevent crashes
+        try:
+            gc.collect()
+        except Exception:
+            pass
     
         # 2. TIME SERIES ANALYSIS (from your notebook Cell 6) - LAZY LOADED
         try:
@@ -1059,10 +1062,16 @@ if df is not None and accurate_kpis is not None:
             st.error(f"Error in Time Series Analysis: {str(e)}")
             import traceback
             st.code(traceback.format_exc())
-            gc.collect()
+            try:
+                gc.collect()
+            except Exception:
+                pass
     
-        # Force cleanup after time series
-        gc.collect()
+        # Force cleanup after time series - wrapped to prevent crashes
+        try:
+            gc.collect()
+        except Exception:
+            pass
     
         # 3. COUNTRY ANALYSIS (from your notebook Cell 9) - LAZY LOADED
         st.markdown('<h2 class="section-header">Country Analysis</h2>', unsafe_allow_html=True)
@@ -1078,8 +1087,11 @@ if df is not None and accurate_kpis is not None:
             }).sort_values('value_fob_aud', ascending=False)
         
             # Clean up df_country reference immediately
-            del df_country
-            gc.collect()
+            try:
+                del df_country
+                gc.collect()
+            except Exception:
+                pass
         
             # Check if we have data for the selected date range
             if len(top_countries) > 0:
@@ -1125,15 +1137,21 @@ if df is not None and accurate_kpis is not None:
                 st.plotly_chart(fig)
             
                 # Clean up memory after country analysis
-                del top_countries, top_15, fig
-                gc.collect()
+                try:
+                    del top_countries, top_15, fig
+                    gc.collect()
+                except Exception:
+                    pass
             else:
                 st.warning("No data available for the selected date range. Please adjust your date filter.")
         else:
             st.warning("No data available for country analysis")
     
-        # Force cleanup
-        gc.collect()
+        # Force cleanup - wrapped to prevent crashes
+        try:
+            gc.collect()
+        except Exception:
+            pass
     
         # 4. PRODUCT ANALYSIS (from your notebook Cell 11) - LAZY LOADED
         st.markdown('<h2 class="section-header">Product Analysis</h2>', unsafe_allow_html=True)
@@ -1210,13 +1228,19 @@ if df is not None and accurate_kpis is not None:
                 st.warning("No data available for the selected date range. Please adjust your date filter.")
         
             # Clean up memory after product analysis
-            del top_products, top_display, top_products_chart, products_df, fig
-            gc.collect()
+            try:
+                del top_products, top_display, top_products_chart, products_df, fig
+                gc.collect()
+            except Exception:
+                pass
         else:
             st.warning("No data available for product analysis")
     
-        # Force cleanup
-        gc.collect()
+        # Force cleanup - wrapped to prevent crashes
+        try:
+            gc.collect()
+        except Exception:
+            pass
     
         # 4.5. INDUSTRY CATEGORY ANALYSIS (EXACT from your notebook) - LAZY LOADED
         st.markdown('<h2 class="section-header">Industry Category Analysis</h2>', unsafe_allow_html=True)
@@ -2484,28 +2508,52 @@ if df is not None and accurate_kpis is not None:
                     st.write("Data not available")
         
             # Clean up
-            del top_countries_summary
-            gc.collect()
+            try:
+                del top_countries_summary
+                gc.collect()
+            except Exception:
+                pass
         except Exception as e:
             st.error(f"Error in Executive Summary: {str(e)}")
             import traceback
             st.code(traceback.format_exc())
         
         # Footer (always show, even if Executive Summary had errors)
-        st.markdown("---")
-        st.markdown("**Australian Freight Export Analysis Dashboard** | **Data Source:** Australian Bureau of Statistics | **Last Updated:** " + datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        try:
+            st.markdown("---")
+            try:
+                last_updated = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            except Exception:
+                last_updated = "N/A"
+            st.markdown(f"**Australian Freight Export Analysis Dashboard** | **Data Source:** Australian Bureau of Statistics | **Last Updated:** {last_updated}")
+        except Exception:
+            # Minimal footer if there's any issue
+            st.markdown("---")
+            st.markdown("**Australian Freight Export Analysis Dashboard**")
         
-        # Final memory cleanup
-        gc.collect()
+        # Final memory cleanup - wrapped in try-except to prevent crashes
+        try:
+            gc.collect()
+        except Exception:
+            pass  # Silently ignore cleanup errors
     except Exception as e:
         st.error(f"Critical dashboard error: {str(e)}")
         import traceback
-        st.code(traceback.format_exc())
+        try:
+            st.code(traceback.format_exc())
+        except Exception:
+            pass  # If even error display fails, continue
         st.warning("Some sections may not have loaded. Try refreshing the page or clearing the cache.")
         # Footer even on error
-        st.markdown("---")
-        st.markdown("**Australian Freight Export Analysis Dashboard** | **Data Source:** Australian Bureau of Statistics")
-        gc.collect()
+        try:
+            st.markdown("---")
+            st.markdown("**Australian Freight Export Analysis Dashboard** | **Data Source:** Australian Bureau of Statistics")
+        except Exception:
+            pass  # If footer fails, just continue
+        try:
+            gc.collect()
+        except Exception:
+            pass  # Silently ignore cleanup errors
 
 else:
     st.error("Unable to load data. Please check your data file and try again.")
