@@ -285,37 +285,50 @@ def ensure_data_file() -> str:
     - First checks if cleaned file from notebook exists (preferred)
     - If missing: generate immediately
     - If older than 10 days: regenerate from ABS website
-    Returns the relative path to the cleaned CSV.
+    - Converts CSV to Parquet for faster, smaller file size (4-10x smaller)
+    Returns the relative path to the cleaned Parquet file (or CSV if conversion fails).
     """
     import os
     import time
     os.makedirs('data', exist_ok=True)
 
-    cleaned_path = 'data/exports_cleaned.csv'
+    cleaned_csv_path = 'data/exports_cleaned.csv'
+    cleaned_parquet_path = 'data/exports_cleaned.parquet'
     
-    # Check if cleaned file exists and is fresh (from notebook or previous generation)
-    if os.path.exists(cleaned_path):
-        # Check file age
-        file_age_days = (time.time() - os.path.getmtime(cleaned_path)) / (60 * 60 * 24)
-        
-        # If file is less than 10 days old, check if it has required columns
+    # Prefer Parquet file (smaller, faster) - check if it exists and is fresh
+    if os.path.exists(cleaned_parquet_path):
+        file_age_days = (time.time() - os.path.getmtime(cleaned_parquet_path)) / (60 * 60 * 24)
         if file_age_days <= 10:
             try:
                 import pandas as pd
-                sample_df = pd.read_csv(cleaned_path, nrows=1)
-                # Check if it has all required columns
+                sample_df = pd.read_parquet(cleaned_parquet_path, nrows=1)
                 required_cols = ['month_number', 'year', 'value_fob_aud', 'gross_weight_tonnes']
                 if all(col in sample_df.columns for col in required_cols):
-                    # File exists, is fresh, and has required columns - use it
-                    return cleaned_path
-                else:
-                    # Missing required columns, need to regenerate
-                    st.info("Updating data format (adding missing columns)...")
+                    return cleaned_parquet_path
             except Exception:
-                # File might be corrupted, will regenerate
+                pass
+    
+    # Check CSV file (fallback or if Parquet doesn't exist)
+    if os.path.exists(cleaned_csv_path):
+        file_age_days = (time.time() - os.path.getmtime(cleaned_csv_path)) / (60 * 60 * 24)
+        if file_age_days <= 10:
+            try:
+                import pandas as pd
+                sample_df = pd.read_csv(cleaned_csv_path, nrows=1)
+                required_cols = ['month_number', 'year', 'value_fob_aud', 'gross_weight_tonnes']
+                if all(col in sample_df.columns for col in required_cols):
+                    # Convert CSV to Parquet for future use (much smaller, faster)
+                    try:
+                        df_temp = pd.read_csv(cleaned_csv_path)
+                        df_temp.to_parquet(cleaned_parquet_path, index=False, compression='snappy')
+                        st.info("✅ Converted CSV to Parquet format (4-10x smaller, loads faster)")
+                        return cleaned_parquet_path
+                    except Exception:
+                        # If Parquet conversion fails, use CSV
+                        return cleaned_csv_path
+            except Exception:
                 pass
         else:
-            # File is older than 10 days
             st.info(f"Data is {int(file_age_days)} days old. Refreshing from ABS website...")
     
     # If we get here, we need to regenerate
@@ -470,93 +483,126 @@ def ensure_data_file() -> str:
     if 'country_of_destination' in df.columns:
         df['country_of_destination'] = df['country_of_destination'].astype(str).str.strip()
 
-    df.to_csv(cleaned_path, index=False)
-    st.success("Data loaded and processed successfully!")
-    return cleaned_path
+    # Save as both CSV (backup) and Parquet (primary - 4-10x smaller, faster)
+    try:
+        df.to_csv(cleaned_csv_path, index=False)
+        df.to_parquet(cleaned_parquet_path, index=False, compression='snappy')
+        st.success("✅ Data loaded and processed successfully! Saved as Parquet (4-10x smaller, loads faster)")
+        return cleaned_parquet_path
+    except Exception as e:
+        # If Parquet save fails, fall back to CSV
+        try:
+            df.to_csv(cleaned_csv_path, index=False)
+            st.success("Data loaded and processed successfully! (Saved as CSV)")
+            return cleaned_csv_path
+        except Exception:
+            raise Exception(f"Failed to save data: {str(e)}")
 
 
-@st.cache_data(ttl=60, max_entries=1, show_spinner=False)  # Very short TTL to free memory quickly
+def _process_chunk(chunk: pd.DataFrame) -> pd.DataFrame:
+    """Process a single chunk of data - apply transformations and optimizations."""
+    # Ensure month_number exists
+    if 'month_number' not in chunk.columns and 'month' in chunk.columns:
+        month_map = {
+            'January': 1, 'February': 2, 'March': 3, 'April': 4,
+            'May': 5, 'June': 6, 'July': 7, 'August': 8,
+            'September': 9, 'October': 10, 'November': 11, 'December': 12,
+            'Jan': 1, 'Feb': 2, 'Mar': 3, 'Apr': 4,
+            'May': 5, 'Jun': 6, 'Jul': 7, 'Aug': 8,
+            'Sep': 9, 'Oct': 10, 'Nov': 11, 'Dec': 12
+        }
+        chunk['month_name'] = chunk['month'].astype(str).str.split().str[0]
+        chunk['month_number'] = chunk['month_name'].map(month_map).fillna(1)
+        chunk = chunk.drop(columns=['month_name'], errors='ignore')
+    
+    # Ensure product_description exists
+    if 'product_description' not in chunk.columns:
+        import re
+        def _norm(s: str) -> str:
+            return re.sub(r"[^a-z0-9]", "", str(s).lower())
+        
+        candidates = []
+        for col in chunk.columns:
+            col_norm = _norm(col)
+            if col_norm in {'productdescription', 'product_description', 'sitc'}:
+                candidates.append(col)
+        
+        if candidates:
+            chunk['product_description'] = chunk[candidates[0]].astype(str)
+        else:
+            chunk['product_description'] = 'All Products'
+    
+    # Ensure code column exists
+    if 'prod_descpt_code' not in chunk.columns and 'sitc_code' in chunk.columns:
+        chunk['prod_descpt_code'] = chunk['sitc_code'].astype(str)
+    
+    # Downcast numerics
+    for col in chunk.select_dtypes(include=['int64','float64']).columns:
+        if pd.api.types.is_integer_dtype(chunk[col]):
+            chunk[col] = pd.to_numeric(chunk[col], downcast='integer')
+        else:
+            chunk[col] = pd.to_numeric(chunk[col], downcast='float')
+    
+    # Derived fields
+    if 'year' in chunk.columns and 'month_number' in chunk.columns:
+        chunk['date'] = pd.to_datetime(chunk['year'].astype(str) + '-' + chunk['month_number'].astype(str).str.zfill(2) + '-01')
+    if {'value_fob_aud','gross_weight_tonnes'}.issubset(chunk.columns):
+        chunk['value_per_tonne'] = chunk['value_fob_aud'] / chunk['gross_weight_tonnes']
+    
+    return chunk
+
+@st.cache_data(ttl=60, max_entries=1, show_spinner=False)
 def load_exports_cleaned(path: str) -> pd.DataFrame:
-    """Load all columns in chunks, add compatibility shims, and downcast numerics to save RAM."""
-    # Load in optimized chunks - balance between memory and performance
-    chunk_size = 75000  # 75k rows at a time - optimized for full dataset loading
+    """Load data in chunks from Parquet (preferred) or CSV."""
+    is_parquet = path.endswith('.parquet')
+    chunk_size = 100000 if is_parquet else 75000
     chunks = []
     df_combined = None
     
     try:
-        for chunk in pd.read_csv(path, chunksize=chunk_size):
-            # Apply transformations to each chunk
-            # Ensure month_number exists
-            if 'month_number' not in chunk.columns and 'month' in chunk.columns:
-                month_map = {
-                    'January': 1, 'February': 2, 'March': 3, 'April': 4,
-                    'May': 5, 'June': 6, 'July': 7, 'August': 8,
-                    'September': 9, 'October': 10, 'November': 11, 'December': 12,
-                    'Jan': 1, 'Feb': 2, 'Mar': 3, 'Apr': 4,
-                    'May': 5, 'Jun': 6, 'Jul': 7, 'Aug': 8,
-                    'Sep': 9, 'Oct': 10, 'Nov': 11, 'Dec': 12
-                }
-                chunk['month_name'] = chunk['month'].astype(str).str.split().str[0]
-                chunk['month_number'] = chunk['month_name'].map(month_map).fillna(1)
-                chunk = chunk.drop(columns=['month_name'], errors='ignore')
-            
-            # Ensure product_description exists
-            if 'product_description' not in chunk.columns:
-                import re
-                def _norm(s: str) -> str:
-                    return re.sub(r"[^a-z0-9]", "", str(s).lower())
-                
-                candidates = []
-                for col in chunk.columns:
-                    col_norm = _norm(col)
-                    if col_norm in {'productdescription', 'product_description', 'sitc'}:
-                        candidates.append(col)
-                
-                if candidates:
-                    chunk['product_description'] = chunk[candidates[0]].astype(str)
+        if is_parquet:
+            try:
+                df_full = pd.read_parquet(path)
+                if len(df_full) > 500000:
+                    for i in range(0, len(df_full), chunk_size):
+                        chunk = df_full.iloc[i:i+chunk_size].copy()
+                        chunk = _process_chunk(chunk)
+                        chunks.append(chunk)
+                        if len(chunks) >= 3:
+                            if df_combined is None:
+                                df_combined = pd.concat(chunks, ignore_index=True)
+                            else:
+                                df_combined = pd.concat([df_combined] + chunks, ignore_index=True)
+                            chunks = []
+                    if chunks:
+                        if df_combined is None:
+                            df_combined = pd.concat(chunks, ignore_index=True)
+                        else:
+                            df_combined = pd.concat([df_combined] + chunks, ignore_index=True)
+                    return df_combined if df_combined is not None else pd.DataFrame()
                 else:
-                    chunk['product_description'] = 'All Products'
+                    return _process_chunk(df_full)
+            except Exception:
+                is_parquet = False
+        
+        if not is_parquet:
+            for chunk in pd.read_csv(path, chunksize=chunk_size):
+                chunk = _process_chunk(chunk)
+                chunks.append(chunk)
+                if len(chunks) >= 3:
+                    if df_combined is None:
+                        df_combined = pd.concat(chunks, ignore_index=True)
+                    else:
+                        df_combined = pd.concat([df_combined] + chunks, ignore_index=True)
+                    chunks = []
             
-            # Ensure code column exists
-            if 'prod_descpt_code' not in chunk.columns and 'sitc_code' in chunk.columns:
-                chunk['prod_descpt_code'] = chunk['sitc_code'].astype(str)
-            
-            # Downcast numerics
-            for col in chunk.select_dtypes(include=['int64','float64']).columns:
-                if pd.api.types.is_integer_dtype(chunk[col]):
-                    chunk[col] = pd.to_numeric(chunk[col], downcast='integer')
-                else:
-                    chunk[col] = pd.to_numeric(chunk[col], downcast='float')
-            
-            # Derived fields
-            if 'year' in chunk.columns and 'month_number' in chunk.columns:
-                chunk['date'] = pd.to_datetime(chunk['year'].astype(str) + '-' + chunk['month_number'].astype(str).str.zfill(2) + '-01')
-            if {'value_fob_aud','gross_weight_tonnes'}.issubset(chunk.columns):
-                chunk['value_per_tonne'] = chunk['value_fob_aud'] / chunk['gross_weight_tonnes']
-            
-            chunks.append(chunk)
-            # Combine chunks in smaller batches to reduce memory spikes
-            # Process and combine more frequently to avoid memory buildup
-            if len(chunks) >= 3:  # Combine every 3 chunks (150k rows) - balanced approach
+            if chunks:
                 if df_combined is None:
                     df_combined = pd.concat(chunks, ignore_index=True)
                 else:
                     df_combined = pd.concat([df_combined] + chunks, ignore_index=True)
-                chunks = []
-                gc.collect()
-        
-        # Combine remaining chunks
-        if chunks:
-            if df_combined is None:
-                df_combined = pd.concat(chunks, ignore_index=True)
-            else:
-                df_combined = pd.concat([df_combined] + chunks, ignore_index=True)
-        
-        df = df_combined if df_combined is not None else pd.DataFrame()
-        del chunks, df_combined
-        gc.collect()
-        
-        return df
+            
+            return df_combined if df_combined is not None else pd.DataFrame()
     except Exception as e:
         st.error(f"Error loading data file: {str(e)}")
         import traceback
