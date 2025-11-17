@@ -916,8 +916,10 @@ if df is not None and accurate_kpis is not None:
                     
                     # Check if we have data for the selected date range
                     if len(monthly) > 0:
-                        # Safely create period string
-                        monthly['period'] = monthly['month'].astype(str) + ' ' + monthly['year'].astype(str)
+                        # Safely create period string - extract only month name (remove any year that might be in month column)
+                        # Extract just the month name (first word) to avoid duplicate years
+                        month_names_only = monthly['month'].astype(str).str.split().str[0]  # Get first word only
+                        monthly['period'] = month_names_only + ' ' + monthly['year'].astype(str)
                         # Handle division by zero and infinite values
                         monthly['value_per_tonne'] = monthly['value_fob_aud'] / monthly['gross_weight_tonnes'].replace(0, np.nan)
                         monthly['value_per_tonne'] = monthly['value_per_tonne'].replace([np.inf, -np.inf], np.nan).fillna(0)

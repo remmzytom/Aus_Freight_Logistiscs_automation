@@ -942,3 +942,23 @@ print(f"Total Weight: {df['gross_weight_tonnes'].sum():,.2f} tonnes")
 2025-11-17 11:14:34,094 - INFO - Duration: 0:04:33.918959
 2025-11-17 11:14:42,443 - INFO - Email sent successfully: Freight Logistics Automation - SUCCESS
 2025-11-17 11:14:42,443 - INFO - Success notification sent
+2025-11-17 11:50:42,035 - INFO - Simple Freight Logistics Automation Started
+2025-11-17 11:50:42,035 - INFO - Project Directory: C:\Cursor AI_projects\Aus_Freight_Logistic
+2025-11-17 11:50:42,035 - INFO - Starting Freight Logistics Automation
+2025-11-17 11:50:42,035 - INFO - Started at: 2025-11-17 11:50:42
+2025-11-17 11:50:42,035 - INFO - Force fresh data download - running extractor...
+2025-11-17 11:50:42,035 - INFO - Collecting fresh data from ABS website...
+2025-11-17 11:51:33,129 - INFO - Data collection completed successfully
+2025-11-17 11:51:33,130 - INFO - Running data cleaning...
+2025-11-17 11:53:26,588 - INFO - Data cleaning completed successfully
+2025-11-17 11:53:26,589 - INFO - Running data analysis...
+2025-11-17 11:53:51,783 - INFO - Data analysis completed successfully
+2025-11-17 11:53:51,783 - INFO - Updating dashboard...
+2025-11-17 11:53:51,783 - INFO - Launching Streamlit dashboard in the background...
+2025-11-17 11:53:54,790 - INFO - Dashboard launched successfully in the background
+2025-11-17 11:53:54,790 - INFO - Dashboard available at: https://abs-exports.streamlit.app
+2025-11-17 11:53:54,790 - INFO - Streamlit process is running (PID: 37844)
+2025-11-17 11:53:54,790 - INFO - Automation completed successfully!
+2025-11-17 11:53:54,791 - INFO - Duration: 0:03:12.754934
+2025-11-17 11:54:03,031 - INFO - Email sent successfully: Freight Logistics Automation - SUCCESS
+2025-11-17 11:54:03,031 - INFO - Success notification sent
