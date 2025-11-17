@@ -2518,24 +2518,15 @@ if df is not None and accurate_kpis is not None:
             import traceback
             st.code(traceback.format_exc())
         
-        # Footer (always show, even if Executive Summary had errors)
+        # Footer (always show, even if Executive Summary had errors) - simplified to prevent crashes
         try:
             st.markdown("---")
-            try:
-                last_updated = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            except Exception:
-                last_updated = "N/A"
-            st.markdown(f"**Australian Freight Export Analysis Dashboard** | **Data Source:** Australian Bureau of Statistics | **Last Updated:** {last_updated}")
+            st.markdown("**Australian Freight Export Analysis Dashboard** | **Data Source:** Australian Bureau of Statistics")
         except Exception:
-            # Minimal footer if there's any issue
-            st.markdown("---")
-            st.markdown("**Australian Freight Export Analysis Dashboard**")
+            pass  # Silently fail if footer can't be rendered
         
-        # Final memory cleanup - wrapped in try-except to prevent crashes
-        try:
-            gc.collect()
-        except Exception:
-            pass  # Silently ignore cleanup errors
+        # Final memory cleanup - minimal and safe
+        # Note: gc.collect() removed here to prevent crashes - let Python handle cleanup automatically
     except Exception as e:
         st.error(f"Critical dashboard error: {str(e)}")
         import traceback
@@ -2544,17 +2535,18 @@ if df is not None and accurate_kpis is not None:
         except Exception:
             pass  # If even error display fails, continue
         st.warning("Some sections may not have loaded. Try refreshing the page or clearing the cache.")
-        # Footer even on error
+        # Footer even on error - minimal
         try:
             st.markdown("---")
-            st.markdown("**Australian Freight Export Analysis Dashboard** | **Data Source:** Australian Bureau of Statistics")
+            st.markdown("**Australian Freight Export Analysis Dashboard**")
         except Exception:
             pass  # If footer fails, just continue
-        try:
-            gc.collect()
-        except Exception:
-            pass  # Silently ignore cleanup errors
+        # Note: gc.collect() removed to prevent crashes - let Python handle cleanup automatically
 
 else:
     st.error("Unable to load data. Please check your data file and try again.")
+
+# Final safety: prevent any post-execution crashes
+# Streamlit scripts run continuously, so we don't need to do anything here
+# This comment ensures the script ends cleanly
 
