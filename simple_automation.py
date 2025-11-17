@@ -45,17 +45,20 @@ class SimpleAutomation:
         self.steps_completed = []
         self.steps_failed = []
         
-        # Email configuration (update these with your email)
+        # Email configuration
         self.email_config = {
             'smtp_server': 'smtp.gmail.com',
             'smtp_port': 587,
             'sender_email': 'aremuakintomiwa@gmail.com',
             'sender_password': 'wjfb whfj lpsg yiju',
             'recipient_emails': [
-                'aremuakintomiwa@gmail.com'     # Your email
-               # 'manager@company.com'             # Manager's email (change this)
+                'aremuakintomiwa@gmail.com',     # Your email
+                'lawrence@australiantradelogisticscorporation.com.au'  # Manager's email
             ]
         }
+        
+        # Streamlit Cloud URL
+        self.streamlit_cloud_url = "https://abs-exports.streamlit.app"
         
         logger.info("Simple Freight Logistics Automation Started")
         logger.info(f"Project Directory: {self.project_dir}")
@@ -208,7 +211,7 @@ class SimpleAutomation:
             # Check if process is still running (started successfully)
             if streamlit_process.poll() is None:
                 logger.info("Dashboard launched successfully in the background")
-                logger.info("Dashboard available at: http://localhost:8501")
+                logger.info(f"Dashboard available at: {self.streamlit_cloud_url}")
                 logger.info("Streamlit process is running (PID: {})".format(streamlit_process.pid))
                 return True
             else:
@@ -244,8 +247,9 @@ COMPLETED STEPS:
 
 DASHBOARD STATUS:
 • Dashboard is updated with fresh data
-• Available at: http://localhost:8501
+• Available at: {self.streamlit_cloud_url}
 • Data includes 2024-2025 export records
+• Accessible from anywhere with internet connection
 
 NEXT STEPS:
 • Dashboard is ready for stakeholder review
@@ -353,7 +357,7 @@ def main():
     if success:
         print("Automation completed successfully!")
         print("Dashboard updated with fresh data")
-        print("Dashboard available at: http://localhost:8501")
+        print(f"Dashboard available at: {automation.streamlit_cloud_url}")
         print("Email notification sent (if configured)")
         sys.exit(0)
     else:

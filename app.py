@@ -281,10 +281,10 @@ st.markdown("""
 
 # Load data function with accurate KPIs and fast dashboard
 def ensure_data_file() -> str:
-    """Ensure cleaned data file exists and is fresh (auto-refreshes if >30 days old).
+    """Ensure cleaned data file exists and is fresh (auto-refreshes if >10 days old).
     - First checks if cleaned file from notebook exists (preferred)
     - If missing: generate immediately
-    - If older than 30 days: regenerate from ABS website
+    - If older than 10 days: regenerate from ABS website
     Returns the relative path to the cleaned CSV.
     """
     import os
@@ -298,8 +298,8 @@ def ensure_data_file() -> str:
         # Check file age
         file_age_days = (time.time() - os.path.getmtime(cleaned_path)) / (60 * 60 * 24)
         
-        # If file is less than 30 days old, check if it has required columns
-        if file_age_days <= 30:
+        # If file is less than 10 days old, check if it has required columns
+        if file_age_days <= 10:
             try:
                 import pandas as pd
                 sample_df = pd.read_csv(cleaned_path, nrows=1)
@@ -315,7 +315,7 @@ def ensure_data_file() -> str:
                 # File might be corrupted, will regenerate
                 pass
         else:
-            # File is older than 30 days
+            # File is older than 10 days
             st.info(f"Data is {int(file_age_days)} days old. Refreshing from ABS website...")
     
     # If we get here, we need to regenerate
