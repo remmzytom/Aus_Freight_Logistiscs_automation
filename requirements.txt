@@ -4,6 +4,7 @@ streamlit>=1.31.0
 # Data processing
 pandas>=2.0.0
 numpy>=1.24.0
+pyarrow>=14.0.0  # Required for Parquet file format (4-10x smaller, faster loading)
 
 # Visualization
 matplotlib>=3.7.0
