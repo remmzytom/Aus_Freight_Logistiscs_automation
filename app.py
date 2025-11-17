@@ -1428,7 +1428,7 @@ if df is not None and accurate_kpis is not None:
     # Display interactive table with sorting, filtering, and responsive design
     st.dataframe(
         display_table,
-        use_container_width=True,
+        width='stretch',
         hide_index=True,
         column_config=column_config
     )
@@ -2394,7 +2394,7 @@ if df is not None and accurate_kpis is not None:
                         hovertemplate='<b>%{y}</b><br>YoY Growth: %{x:.1f}%<br>2024: $%{customdata[2]:.2f}B<br>2025: $%{customdata[3]:.2f}B<br>Change: $%{customdata[1]:.2f}B<extra></extra>',
                         customdata=top_growing[['YoY_Growth_%', 'YoY_Growth_Absolute', 'Value_2024', 'Value_2025']].values
                     )
-                    st.plotly_chart(fig1, use_container_width=True)
+                    st.plotly_chart(fig1, width='stretch')
                     
                     # Chart 2: Top 10 Declining Markets (Whole Year)
                     fig2 = px.bar(
@@ -2426,7 +2426,7 @@ if df is not None and accurate_kpis is not None:
                         hovertemplate='<b>%{y}</b><br>YoY Growth: %{x:.1f}%<br>2024: $%{customdata[2]:.2f}B<br>2025: $%{customdata[3]:.2f}B<br>Change: $%{customdata[1]:.2f}B<extra></extra>',
                         customdata=top_declining[['YoY_Growth_%', 'YoY_Growth_Absolute', 'Value_2024', 'Value_2025']].values
                     )
-                    st.plotly_chart(fig2, use_container_width=True)
+                    st.plotly_chart(fig2, width='stretch')
                     
                     # Clean up
                     del df_yoy, country_yearly, significant_countries, top_growing, top_declining
