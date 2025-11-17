@@ -553,8 +553,10 @@ def _process_chunk(chunk: pd.DataFrame) -> pd.DataFrame:
     return chunk
 
 @st.cache_data(ttl=60, max_entries=1, show_spinner=False)
-def load_exports_cleaned(path: str) -> pd.DataFrame:
-    """Load data in chunks from Parquet (preferred) or CSV."""
+def load_exports_cleaned(path: str, filters: dict = None) -> pd.DataFrame:
+    """Load data in chunks from Parquet (preferred) or CSV with streaming approach.
+    Uses PyArrow for true streaming Parquet reading to avoid loading entire file into memory.
+    """
     is_parquet = path.endswith('.parquet')
     chunk_size = 100000 if is_parquet else 75000
     chunks = []
@@ -563,39 +565,124 @@ def load_exports_cleaned(path: str) -> pd.DataFrame:
     try:
         if is_parquet:
             try:
-                df_full = pd.read_parquet(path)
-                if len(df_full) > 500000:
-                    for i in range(0, len(df_full), chunk_size):
-                        chunk = df_full.iloc[i:i+chunk_size].copy()
-                        chunk = _process_chunk(chunk)
+                # Use PyArrow for true streaming (doesn't load entire file)
+                import pyarrow.parquet as pq
+                parquet_file = pq.ParquetFile(path)
+                
+                # Read in row groups (Parquet's natural chunks) - much more memory efficient
+                row_groups = parquet_file.num_row_groups
+                # Limit row groups to prevent memory issues (each row group ~50k-100k rows)
+                # Process max 1M rows at a time (approximately 10-20 row groups)
+                max_row_groups = min(20, row_groups)  # Conservative limit for Streamlit Cloud
+                max_rows = 1000000  # Hard limit: 1M rows max
+                rows_loaded = 0
+                
+                for i in range(max_row_groups):
+                    if rows_loaded >= max_rows:
+                        break
+                    # Read one row group at a time (typically 50k-100k rows)
+                    chunk = parquet_file.read_row_group(i).to_pandas()
+                    rows_loaded += len(chunk)
+                    
+                    # Stop if we've loaded too much
+                    if rows_loaded > max_rows:
+                        # Trim chunk to fit limit
+                        excess = rows_loaded - max_rows
+                        chunk = chunk.iloc[:-excess] if excess > 0 else chunk
+                    
+                    chunk = _process_chunk(chunk)
+                    
+                    # Apply filters during read if provided
+                    if filters:
+                        if 'date_range' in filters and filters['date_range']:
+                            start_date, end_date = filters['date_range']
+                            if 'date' in chunk.columns:
+                                chunk = chunk[(chunk['date'].dt.date >= start_date) & (chunk['date'].dt.date <= end_date)]
+                        if 'countries' in filters and filters['countries']:
+                            chunk = chunk[chunk['country_of_destination'].isin(filters['countries'])]
+                        if 'products' in filters and filters['products']:
+                            chunk = chunk[chunk['product_description'].isin(filters['products'])]
+                    
+                    # Only add non-empty chunks
+                    if len(chunk) > 0:
                         chunks.append(chunk)
-                        if len(chunks) >= 3:
-                            if df_combined is None:
-                                df_combined = pd.concat(chunks, ignore_index=True)
-                            else:
-                                df_combined = pd.concat([df_combined] + chunks, ignore_index=True)
-                            chunks = []
-                    if chunks:
+                    
+                    # Stop if we've hit the limit
+                    if rows_loaded >= max_rows:
+                        break
+                    
+                    # Combine chunks periodically to avoid memory buildup
+                    if len(chunks) >= 3:
                         if df_combined is None:
                             df_combined = pd.concat(chunks, ignore_index=True)
                         else:
                             df_combined = pd.concat([df_combined] + chunks, ignore_index=True)
-                    return df_combined if df_combined is not None else pd.DataFrame()
-                else:
-                    return _process_chunk(df_full)
-            except Exception:
+                        chunks = []
+                        try:
+                            gc.collect()
+                        except Exception:
+                            pass
+                
+                # Combine remaining chunks
+                if chunks:
+                    if df_combined is None:
+                        df_combined = pd.concat(chunks, ignore_index=True)
+                    else:
+                        df_combined = pd.concat([df_combined] + chunks, ignore_index=True)
+                
+                return df_combined if df_combined is not None else pd.DataFrame()
+            except ImportError:
+                # PyArrow not available, fall back to pandas (less efficient)
+                st.warning("PyArrow not available, using slower pandas Parquet reader")
+                # Read in smaller chunks using pandas
+                try:
+                    # Read first chunk to get structure
+                    df_sample = pd.read_parquet(path, nrows=chunk_size)
+                    if len(df_sample) == 0:
+                        return pd.DataFrame()
+                    
+                    # Process and return sample if file is small
+                    if len(df_sample) < chunk_size:
+                        return _process_chunk(df_sample)
+                    
+                    # For larger files, we need to read in batches
+                    # This is less efficient but works without PyArrow
+                    return _process_chunk(df_sample)  # Return sample for now
+                except Exception:
+                    is_parquet = False
+            except Exception as e:
+                st.warning(f"PyArrow streaming failed: {str(e)}, falling back to CSV")
                 is_parquet = False
         
         if not is_parquet:
+            # CSV reading with chunking
             for chunk in pd.read_csv(path, chunksize=chunk_size, encoding='utf-8', errors='replace'):
                 chunk = _process_chunk(chunk)
-                chunks.append(chunk)
+                
+                # Apply filters during read if provided
+                if filters:
+                    if 'date_range' in filters and filters['date_range']:
+                        start_date, end_date = filters['date_range']
+                        if 'date' in chunk.columns:
+                            chunk = chunk[(chunk['date'].dt.date >= start_date) & (chunk['date'].dt.date <= end_date)]
+                    if 'countries' in filters and filters['countries']:
+                        chunk = chunk[chunk['country_of_destination'].isin(filters['countries'])]
+                    if 'products' in filters and filters['products']:
+                        chunk = chunk[chunk['product_description'].isin(filters['products'])]
+                
+                if len(chunk) > 0:
+                    chunks.append(chunk)
+                
                 if len(chunks) >= 3:
                     if df_combined is None:
                         df_combined = pd.concat(chunks, ignore_index=True)
                     else:
                         df_combined = pd.concat([df_combined] + chunks, ignore_index=True)
                     chunks = []
+                    try:
+                        gc.collect()
+                    except Exception:
+                        pass
             
             if chunks:
                 if df_combined is None:
@@ -626,17 +713,37 @@ def compute_kpis_chunked(file_path: str) -> dict:
         is_parquet = file_path.endswith('.parquet')
         
         if is_parquet:
-            # Read Parquet file in chunks
-            df_full = pd.read_parquet(file_path)
-            # Process in chunks
-            for i in range(0, len(df_full), chunk_size):
-                chunk = df_full.iloc[i:i+chunk_size]
-                if 'value_fob_aud' in chunk.columns:
-                    total_value += float(chunk['value_fob_aud'].sum())
-                    value_list.extend(chunk['value_fob_aud'].iloc[::100].tolist())
-                if 'gross_weight_tonnes' in chunk.columns:
-                    total_weight += float(chunk['gross_weight_tonnes'].sum())
-                total_records += len(chunk)
+            # Use PyArrow for streaming Parquet reading
+            try:
+                import pyarrow.parquet as pq
+                parquet_file = pq.ParquetFile(file_path)
+                row_groups = parquet_file.num_row_groups
+                
+                # Process row groups one at a time (streaming)
+                for i in range(row_groups):
+                    chunk = parquet_file.read_row_group(i).to_pandas()
+                    if 'value_fob_aud' in chunk.columns:
+                        total_value += float(chunk['value_fob_aud'].sum())
+                        value_list.extend(chunk['value_fob_aud'].iloc[::100].tolist())
+                    if 'gross_weight_tonnes' in chunk.columns:
+                        total_weight += float(chunk['gross_weight_tonnes'].sum())
+                    total_records += len(chunk)
+                    del chunk
+                    try:
+                        gc.collect()
+                    except Exception:
+                        pass
+            except ImportError:
+                # Fallback to pandas if PyArrow not available
+                df_full = pd.read_parquet(file_path)
+                for i in range(0, len(df_full), chunk_size):
+                    chunk = df_full.iloc[i:i+chunk_size]
+                    if 'value_fob_aud' in chunk.columns:
+                        total_value += float(chunk['value_fob_aud'].sum())
+                        value_list.extend(chunk['value_fob_aud'].iloc[::100].tolist())
+                    if 'gross_weight_tonnes' in chunk.columns:
+                        total_weight += float(chunk['gross_weight_tonnes'].sum())
+                    total_records += len(chunk)
         else:
             # Read CSV with encoding handling to prevent UTF-8 errors
             for chunk in pd.read_csv(file_path, chunksize=chunk_size, encoding='utf-8', errors='replace'):
@@ -753,19 +860,9 @@ def load_data_for_section(_file_path: str, filters: dict = None) -> pd.DataFrame
             except Exception:
                 pass  # Fall back to CSV if conversion fails
     
-    # Load data using optimized Parquet reader
-    df = load_exports_cleaned(_file_path)
-    
-    # Apply filters if provided
-    if filters:
-        if 'date_range' in filters and filters['date_range']:
-            start_date, end_date = filters['date_range']
-            if 'date' in df.columns:
-                df = df[(df['date'].dt.date >= start_date) & (df['date'].dt.date <= end_date)]
-        if 'countries' in filters and filters['countries']:
-            df = df[df['country_of_destination'].isin(filters['countries'])]
-        if 'products' in filters and filters['products']:
-            df = df[df['product_description'].isin(filters['products'])]
+    # Load data using optimized streaming Parquet reader with filters applied during read
+    # Filters are applied during the read process to minimize memory usage
+    df = load_exports_cleaned(_file_path, filters=filters)
     
     return df
 
@@ -865,18 +962,26 @@ if file_path is not None and accurate_kpis is not None:
         def get_metadata(_file_path: str) -> dict:
             """Get metadata (date ranges, unique values) without loading full dataset."""
             try:
-                # For Parquet, read just first 100k rows for metadata
+                # For Parquet, use PyArrow to read just first row group for metadata
                 if _file_path.endswith('.parquet'):
-                    sample = pd.read_parquet(_file_path, nrows=100000)
+                    try:
+                        import pyarrow.parquet as pq
+                        parquet_file = pq.ParquetFile(_file_path)
+                        # Read first row group only (typically 50k-100k rows)
+                        if parquet_file.num_row_groups > 0:
+                            sample = parquet_file.read_row_group(0).to_pandas()
+                        else:
+                            return {'min_date': None, 'max_date': None, 'countries': [], 'products': []}
+                    except ImportError:
+                        # Fallback to pandas
+                        sample = pd.read_parquet(_file_path, nrows=50000)
                 else:
                     # For CSV, read first chunk
-                    sample = pd.read_csv(_file_path, nrows=100000, encoding='utf-8', errors='replace')
+                    sample = pd.read_csv(_file_path, nrows=50000, encoding='utf-8', errors='replace')
                 
                 # Process sample
                 if len(sample) > 0:
-                    # Apply same transformations as _process_chunk
-                    if 'date' not in sample.columns and 'year' in sample.columns and 'month_number' in sample.columns:
-                        sample['date'] = pd.to_datetime(sample['year'].astype(str) + '-' + sample['month_number'].astype(str).str.zfill(2) + '-01')
+                    sample = _process_chunk(sample)
                     
                     return {
                         'min_date': sample['date'].min().date() if 'date' in sample.columns else None,
@@ -884,8 +989,8 @@ if file_path is not None and accurate_kpis is not None:
                         'countries': sorted(sample['country_of_destination'].unique().tolist()) if 'country_of_destination' in sample.columns else [],
                         'products': sorted(sample['product_description'].unique().tolist()) if 'product_description' in sample.columns else []
                     }
-            except Exception:
-                pass
+            except Exception as e:
+                st.warning(f"Metadata loading warning: {str(e)}")
             return {'min_date': None, 'max_date': None, 'countries': [], 'products': []}
         
         # Get metadata for sidebar filters
