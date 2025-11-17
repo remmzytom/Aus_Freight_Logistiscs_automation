@@ -11,6 +11,7 @@ from datetime import datetime
 import warnings
 warnings.filterwarnings('ignore')
 import gc
+import os
 
 # Disable Pillow decompression bomb check
 from PIL import Image
@@ -690,11 +691,10 @@ def load_data():
         if accurate_kpis is None:
             return None, None
         
-        # Always load the full dataset using optimized chunked loading
-        df = load_data_full(file_path)
-        
-        gc.collect()
-        return df, accurate_kpis
+        # Don't load full dataset upfront - use lazy loading per section
+        # This prevents memory crashes on Streamlit Cloud
+        # Return file_path instead of DataFrame to enable on-demand loading
+        return file_path, accurate_kpis
     except Exception as e:
         st.error(f"Error loading data: {str(e)}")
         import traceback
@@ -707,67 +707,194 @@ if 'df_loaded' not in st.session_state:
     st.session_state.accurate_kpis = None
     st.session_state.data_file_path = None
 
-# Load data with error handling - use session state to avoid reloading
-if st.session_state.df_loaded is None:
+# Load data with error handling - use lazy loading to prevent memory crashes
+if st.session_state.data_file_path is None:
     try:
-        with st.spinner('Loading dataset... This may take a moment.'):
-            df, accurate_kpis = load_data()
-            if df is not None:
-                st.session_state.df_loaded = df
+        with st.spinner('Initializing dataset... This may take a moment.'):
+            file_path, accurate_kpis = load_data()
+            if file_path is not None and accurate_kpis is not None:
+                st.session_state.data_file_path = file_path
                 st.session_state.accurate_kpis = accurate_kpis
-                st.success(f"✅ Loaded dataset: {len(df):,} records")
+                # Load a sample to show record count (first 1000 rows)
+                sample_df = load_exports_cleaned(file_path)
+                if len(sample_df) > 0:
+                    # Estimate total records from file size or sample
+                    total_estimate = accurate_kpis.get('total_records', len(sample_df))
+                    st.success(f"✅ Dataset ready: ~{total_estimate:,} records (lazy loading enabled)")
+                else:
+                    st.success("✅ Dataset ready (lazy loading enabled)")
             else:
-                st.error("Failed to load data")
+                st.error("Failed to initialize data")
                 st.stop()
     except Exception as e:
-        st.error(f"Failed to load data: {str(e)}")
+        st.error(f"Failed to initialize data: {str(e)}")
+        import traceback
+        st.code(traceback.format_exc())
         st.stop()
 else:
-    df = st.session_state.df_loaded
+    file_path = st.session_state.data_file_path
     accurate_kpis = st.session_state.accurate_kpis
 
-if df is not None and accurate_kpis is not None:
+# Helper function to load data on-demand for each section with Parquet optimization
+@st.cache_data(ttl=300, max_entries=3)  # Cache up to 3 different filtered views
+def load_data_for_section(_file_path: str, filters: dict = None) -> pd.DataFrame:
+    """Load data on-demand for a specific section with optional filters.
+    Uses Parquet for fast, memory-efficient loading.
+    """
+    # Ensure we're using Parquet file
+    if not _file_path.endswith('.parquet'):
+        # Convert CSV to Parquet if needed
+        parquet_path = _file_path.replace('.csv', '.parquet')
+        if os.path.exists(_file_path) and not os.path.exists(parquet_path):
+            try:
+                df_temp = pd.read_csv(_file_path, encoding='utf-8', errors='replace')
+                df_temp.to_parquet(parquet_path, index=False, compression='snappy')
+                _file_path = parquet_path
+            except Exception:
+                pass  # Fall back to CSV if conversion fails
+    
+    # Load data using optimized Parquet reader
+    df = load_exports_cleaned(_file_path)
+    
+    # Apply filters if provided
+    if filters:
+        if 'date_range' in filters and filters['date_range']:
+            start_date, end_date = filters['date_range']
+            if 'date' in df.columns:
+                df = df[(df['date'].dt.date >= start_date) & (df['date'].dt.date <= end_date)]
+        if 'countries' in filters and filters['countries']:
+            df = df[df['country_of_destination'].isin(filters['countries'])]
+        if 'products' in filters and filters['products']:
+            df = df[df['product_description'].isin(filters['products'])]
+    
+    return df
+
+# Ensure Parquet file exists - convert CSV if needed
+def ensure_parquet_file(csv_path: str) -> str:
+    """Ensure Parquet file exists, convert CSV if needed."""
+    parquet_path = csv_path.replace('.csv', '.parquet')
+    
+    if csv_path.endswith('.parquet'):
+        return csv_path
+    
+    if os.path.exists(parquet_path):
+        return parquet_path
+    
+    if os.path.exists(csv_path):
+        try:
+            st.info("Converting CSV to Parquet for faster loading...")
+            # Read CSV in chunks and write to Parquet
+            chunk_size = 100000
+            chunks = []
+            for chunk in pd.read_csv(csv_path, chunksize=chunk_size, encoding='utf-8', errors='replace'):
+                chunks.append(chunk)
+                if len(chunks) >= 5:  # Write every 5 chunks
+                    df_temp = pd.concat(chunks, ignore_index=True)
+                    if os.path.exists(parquet_path):
+                        df_existing = pd.read_parquet(parquet_path)
+                        df_temp = pd.concat([df_existing, df_temp], ignore_index=True)
+                    df_temp.to_parquet(parquet_path, index=False, compression='snappy')
+                    chunks = []
+            # Write remaining chunks
+            if chunks:
+                df_temp = pd.concat(chunks, ignore_index=True)
+                if os.path.exists(parquet_path):
+                    df_existing = pd.read_parquet(parquet_path)
+                    df_temp = pd.concat([df_existing, df_temp], ignore_index=True)
+                df_temp.to_parquet(parquet_path, index=False, compression='snappy')
+            st.success("✅ Converted to Parquet format (4-10x smaller, loads faster)")
+            return parquet_path
+        except Exception as e:
+            st.warning(f"Parquet conversion failed, using CSV: {str(e)}")
+            return csv_path
+    
+    return csv_path
+
+# Convert file_path to Parquet if needed
+if file_path and not file_path.endswith('.parquet'):
+    file_path = ensure_parquet_file(file_path)
+    st.session_state.data_file_path = file_path
+
+if file_path is not None and accurate_kpis is not None:
     try:
-        # Replace any residual ABS confidential markers with a clear label
-        if 'country_of_destination' in df.columns:
-            df['country_of_destination'] = df['country_of_destination'].replace(
-                'No Country Details', 'Confidential / Not Published'
-            )
-        
-        # Helper function to safely execute sections
+        # Helper function to safely execute sections with lazy loading
         def safe_execute(func, section_name):
             """Execute a function with error handling to prevent crashes."""
             try:
                 func()
-                gc.collect()  # Clean up after each section
+                try:
+                    gc.collect()  # Clean up after each section
+                except Exception:
+                    pass
             except Exception as e:
                 st.error(f"Error in {section_name}: {str(e)}")
                 import traceback
                 st.code(traceback.format_exc())
         
-        # Final compatibility guard: ensure 'product_description' exists even if cached data is old
-        if 'product_description' not in df.columns:
-            import re
-            def _norm(s: str) -> str:
-                return re.sub(r"[^a-z0-9]", "", str(s).lower())
-            candidates = ['product_description', 'product description', 'product', 'sitc', 'commodity', 'sitc description', 'sitc_description']
-            norm_to_col = { _norm(c): c for c in df.columns }
-            src = None
-            for cand in candidates:
-                key = _norm(cand)
-                if key in norm_to_col:
-                    src = norm_to_col[key]
-                    break
-            if src:
-                df['product_description'] = df[src].astype(str)
-            else:
-                df['product_description'] = 'All Products'
-        # Clean presentation - no status messages
+        # Helper function to get filtered data for a section (lazy loading)
+        def get_filtered_data(filters: dict = None) -> pd.DataFrame:
+            """Load and filter data on-demand for a section."""
+            df = load_data_for_section(file_path, filters)
+            # Apply standard transformations
+            if 'country_of_destination' in df.columns:
+                df['country_of_destination'] = df['country_of_destination'].replace(
+                    'No Country Details', 'Confidential / Not Published'
+                )
+                # Ensure product_description exists
+                if 'product_description' not in df.columns:
+                    import re
+                    def _norm(s: str) -> str:
+                        return re.sub(r"[^a-z0-9]", "", str(s).lower())
+                    candidates = ['product_description', 'product description', 'product', 'sitc', 'commodity', 'sitc description', 'sitc_description']
+                    norm_to_col = { _norm(c): c for c in df.columns }
+                    src = None
+                    for cand in candidates:
+                        key = _norm(cand)
+                        if key in norm_to_col:
+                            src = norm_to_col[key]
+                            break
+                    if src:
+                        df['product_description'] = df[src].astype(str)
+                    else:
+                        df['product_description'] = 'All Products'
+            return df
+        
+        # Load a small sample to get metadata for filters (dates, countries, products)
+        # This is much faster than loading the full dataset
+        @st.cache_data(ttl=600, max_entries=1)
+        def get_metadata(_file_path: str) -> dict:
+            """Get metadata (date ranges, unique values) without loading full dataset."""
+            try:
+                # For Parquet, read just first 100k rows for metadata
+                if _file_path.endswith('.parquet'):
+                    sample = pd.read_parquet(_file_path, nrows=100000)
+                else:
+                    # For CSV, read first chunk
+                    sample = pd.read_csv(_file_path, nrows=100000, encoding='utf-8', errors='replace')
+                
+                # Process sample
+                if len(sample) > 0:
+                    # Apply same transformations as _process_chunk
+                    if 'date' not in sample.columns and 'year' in sample.columns and 'month_number' in sample.columns:
+                        sample['date'] = pd.to_datetime(sample['year'].astype(str) + '-' + sample['month_number'].astype(str).str.zfill(2) + '-01')
+                    
+                    return {
+                        'min_date': sample['date'].min().date() if 'date' in sample.columns else None,
+                        'max_date': sample['date'].max().date() if 'date' in sample.columns else None,
+                        'countries': sorted(sample['country_of_destination'].unique().tolist()) if 'country_of_destination' in sample.columns else [],
+                        'products': sorted(sample['product_description'].unique().tolist()) if 'product_description' in sample.columns else []
+                    }
+            except Exception:
+                pass
+            return {'min_date': None, 'max_date': None, 'countries': [], 'products': []}
+        
+        # Get metadata for sidebar filters
+        metadata = get_metadata(file_path)
         
         # Sidebar controls
         st.sidebar.header("Dashboard Controls")
     
-        # Cache clear button (moved after data loading mode)
+        # Cache clear button
         if st.sidebar.button("Clear Cache & Reload Data", help="Clear cached data and force fresh data reload"):
             st.cache_data.clear()
             st.success("Cache cleared! Refreshing...")
@@ -777,37 +904,39 @@ if df is not None and accurate_kpis is not None:
     
         # Date range filter
         st.sidebar.subheader("Date Range")
-        min_date = df['date'].min().date()
-        max_date = df['date'].max().date()
-    
-        date_range = st.sidebar.date_input(
-            "Select Date Range",
-            value=(min_date, max_date),
-            min_value=min_date
-        )
-    
-        # Filter data based on date range
-        if len(date_range) == 2:
-            start_date, end_date = date_range
-            df_filtered = df[(df['date'].dt.date >= start_date) & (df['date'].dt.date <= end_date)]
+        if metadata['min_date'] and metadata['max_date']:
+            min_date = metadata['min_date']
+            max_date = metadata['max_date']
+            
+            date_range = st.sidebar.date_input(
+                "Select Date Range",
+                value=(min_date, max_date),
+                min_value=min_date
+            )
+            
+            # Prepare filters dict for lazy loading
+            filters = {}
+            if len(date_range) == 2:
+                filters['date_range'] = (date_range[0], date_range[1])
         else:
-            df_filtered = df
-    
+            date_range = None
+            filters = {}
+        
         # Country filter
         st.sidebar.subheader("Country Filter")
-        all_countries = ['All Countries'] + sorted(df['country_of_destination'].unique().tolist())
+        all_countries = ['All Countries'] + metadata['countries']
         selected_countries = st.sidebar.multiselect(
             "Select Countries",
             options=all_countries,
             default=['All Countries']
         )
-    
+        
         if 'All Countries' not in selected_countries and selected_countries:
-            df_filtered = df_filtered[df_filtered['country_of_destination'].isin(selected_countries)]
+            filters['countries'] = selected_countries
     
         # Product filter
         st.sidebar.subheader("Product Filter")
-        all_products = ['All Products'] + sorted(df['product_description'].unique().tolist())
+        all_products = ['All Products'] + metadata['products']
         selected_products = st.sidebar.multiselect(
             "Select Products",
             options=all_products,
@@ -815,7 +944,10 @@ if df is not None and accurate_kpis is not None:
         )
     
         if 'All Products' not in selected_products and selected_products:
-            df_filtered = df_filtered[df_filtered['product_description'].isin(selected_products)]
+            filters['products'] = selected_products
+        
+        # Load filtered data on-demand (lazy loading)
+        df_filtered = get_filtered_data(filters if filters else None)
     
         # Main dashboard content
     
