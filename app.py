@@ -2443,29 +2443,56 @@ if df is not None and accurate_kpis is not None:
         st.code(traceback.format_exc())
     
     # 11. EXECUTIVE SUMMARY (from your notebook Cell 22)
-    st.markdown('<h2 class="section-header">Executive Summary</h2>', unsafe_allow_html=True)
-    
-    # Generate executive summary report (from your notebook)
-    st.markdown("""
-    <div class="summary-box">
-        <h3>EXECUTIVE SUMMARY - AUSTRALIAN FREIGHT EXPORTS 2024-2025</h3>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.subheader("Overview")
-        # Clean dashboard - no unnecessary text
-    
-    with col2:
-        st.subheader("Top 3 Destinations")
-        for i, (country, value) in enumerate(top_countries['Total_Value'].head(3).items(), 1):
-            st.write(f"{i}. {country}: ${value/1e9:.2f}B")
+    try:
+        st.markdown('<h2 class="section-header">Executive Summary</h2>', unsafe_allow_html=True)
+        
+        # Generate executive summary report (from your notebook)
+        st.markdown("""
+        <div class="summary-box">
+            <h3>EXECUTIVE SUMMARY - AUSTRALIAN FREIGHT EXPORTS 2024-2025</h3>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Calculate top countries for Executive Summary (if not already available)
+        try:
+            top_countries_summary = df_filtered.groupby('country_of_destination').agg({
+                'value_fob_aud': 'sum'
+            }).sort_values('value_fob_aud', ascending=False)
+            top_countries_summary.columns = ['Total_Value']
+        except Exception:
+            top_countries_summary = None
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.subheader("Overview")
+            st.write(f"Total Export Value: ${accurate_kpis.get('total_value', 0)/1e9:.2f}B")
+            st.write(f"Total Shipments: {accurate_kpis.get('total_records', 0):,}")
+            st.write(f"Total Weight: {accurate_kpis.get('total_weight', 0)/1e6:.2f}M tonnes")
+        
+        with col2:
+            st.subheader("Top 3 Destinations")
+            if top_countries_summary is not None and len(top_countries_summary) > 0:
+                for i, (country, row) in enumerate(top_countries_summary.head(3).iterrows(), 1):
+                    value = row['Total_Value']
+                    st.write(f"{i}. {country}: ${value/1e9:.2f}B")
+            else:
+                st.write("Data not available")
+        
+        # Clean up
+        del top_countries_summary
+        gc.collect()
+    except Exception as e:
+        st.error(f"Error in Executive Summary: {str(e)}")
+        import traceback
+        st.code(traceback.format_exc())
     
     # Footer
     st.markdown("---")
     st.markdown("**Australian Freight Export Analysis Dashboard** | **Data Source:** Australian Bureau of Statistics | **Last Updated:** " + datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    
+    # Final memory cleanup
+    gc.collect()
 
 else:
     st.error("Unable to load data. Please check your data file and try again.")
