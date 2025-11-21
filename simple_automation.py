@@ -57,8 +57,8 @@ class SimpleAutomation:
             ]
         }
         
-        # Streamlit Cloud URL
-        self.streamlit_cloud_url = "https://abs-exports.streamlit.app"
+        # Cloud Run URL (deployed on Google Cloud Run)
+        self.streamlit_cloud_url = "https://aus-freight-dashboard-qsx3e3zlva-uc.a.run.app"
         
         logger.info("Simple Freight Logistics Automation Started")
         logger.info(f"Project Directory: {self.project_dir}")
