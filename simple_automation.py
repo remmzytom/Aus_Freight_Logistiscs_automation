@@ -26,6 +26,13 @@ from pathlib import Path
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
+# Google Cloud Storage
+try:
+    from google.cloud import storage
+    GCS_AVAILABLE = True
+except ImportError:
+    GCS_AVAILABLE = False
+
 # Set up logging
 logging.basicConfig(
     level=logging.INFO,
@@ -58,10 +65,16 @@ class SimpleAutomation:
         }
         
         # Cloud Run URL (deployed on Google Cloud Run)
-        self.streamlit_cloud_url = "https://aus-freight-dashboard-qsx3e3zlva-uc.a.run.app"
+        self.streamlit_cloud_url = "https://aus-freight-dashboard-828544570472.us-central1.run.app"
+        
+        # Cloud Storage configuration
+        self.gcs_bucket_name = "aus-freight-logistics-data"  # Update with your bucket name
+        self.gcs_cleaned_file = "exports_cleaned.csv"
+        self.gcs_raw_file = "exports_2024_2025.csv"
         
         logger.info("Simple Freight Logistics Automation Started")
         logger.info(f"Project Directory: {self.project_dir}")
+        logger.info(f"Cloud Storage Bucket: {self.gcs_bucket_name}")
 
     def send_email(self, subject, body, is_success=True):
         """Send email notification"""
@@ -179,6 +192,8 @@ class SimpleAutomation:
             
             if result.returncode == 0:
                 logger.info("Data analysis completed successfully")
+                # Upload to Cloud Storage after successful analysis
+                self.upload_to_cloud_storage()
                 return True
             else:
                 logger.error(f"Data analysis failed: {result.stderr}")
@@ -186,6 +201,42 @@ class SimpleAutomation:
                 
         except Exception as e:
             logger.error(f"Data analysis error: {str(e)}")
+            return False
+    
+    def upload_to_cloud_storage(self):
+        """Upload processed data files to Google Cloud Storage"""
+        if not GCS_AVAILABLE:
+            logger.warning("Cloud Storage not available - skipping upload")
+            return False
+        
+        try:
+            logger.info("Uploading data files to Cloud Storage...")
+            client = storage.Client()
+            bucket = client.bucket(self.gcs_bucket_name)
+            
+            # Upload cleaned data file
+            cleaned_file_path = self.project_dir / "data" / "exports_cleaned.csv"
+            if cleaned_file_path.exists():
+                blob = bucket.blob(self.gcs_cleaned_file)
+                blob.upload_from_filename(str(cleaned_file_path))
+                logger.info(f" Uploaded {self.gcs_cleaned_file} to Cloud Storage")
+            else:
+                logger.warning(f"Cleaned data file not found: {cleaned_file_path}")
+            
+            # Upload raw data file (optional)
+            raw_file_path = self.project_dir / "data" / "exports_2024_2025.csv"
+            if raw_file_path.exists():
+                blob = bucket.blob(self.gcs_raw_file)
+                blob.upload_from_filename(str(raw_file_path))
+                logger.info(f" Uploaded {self.gcs_raw_file} to Cloud Storage")
+            
+            logger.info(" All data files uploaded to Cloud Storage successfully")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to upload to Cloud Storage: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
             return False
 
     def update_dashboard(self):

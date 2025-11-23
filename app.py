@@ -13,6 +13,13 @@ warnings.filterwarnings('ignore')
 import gc
 import os
 
+# Google Cloud Storage
+try:
+    from google.cloud import storage
+    GCS_AVAILABLE = True
+except ImportError:
+    GCS_AVAILABLE = False
+
 # Disable Pillow decompression bomb check
 from PIL import Image
 Image.MAX_IMAGE_PIXELS = None
@@ -297,9 +304,29 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Load data function with accurate KPIs and fast dashboard
+def download_from_cloud_storage(bucket_name: str, blob_name: str, local_path: str) -> bool:
+    """Download file from Google Cloud Storage to local path"""
+    if not GCS_AVAILABLE:
+        return False
+    
+    try:
+        client = storage.Client()
+        bucket = client.bucket(bucket_name)
+        blob = bucket.blob(blob_name)
+        
+        if blob.exists():
+            os.makedirs(os.path.dirname(local_path), exist_ok=True)
+            blob.download_to_filename(local_path)
+            return True
+        return False
+    except Exception as e:
+        st.warning(f"Cloud Storage download failed: {str(e)}")
+        return False
+
 def ensure_data_file() -> str:
     """Ensure cleaned data file exists and is fresh (auto-refreshes if >10 days old).
-    - First checks if cleaned file from notebook exists (preferred)
+    - First checks Cloud Storage for latest data
+    - Then checks if cleaned file from notebook exists locally
     - If missing: generate immediately
     - If older than 10 days: regenerate from ABS website
     Returns the relative path to the cleaned CSV file.
@@ -309,8 +336,26 @@ def ensure_data_file() -> str:
     os.makedirs('data', exist_ok=True)
 
     cleaned_csv_path = 'data/exports_cleaned.csv'
+    gcs_bucket_name = "aus-freight-logistics-data"  # Update with your bucket name
+    gcs_blob_name = "exports_cleaned.csv"
     
-    # Check CSV file
+    # First, try to download from Cloud Storage (always get latest)
+    if GCS_AVAILABLE:
+        try:
+            if download_from_cloud_storage(gcs_bucket_name, gcs_blob_name, cleaned_csv_path):
+                st.success("✅ Loaded latest data from Cloud Storage")
+                # Verify the downloaded file is valid
+                try:
+                    sample_df = safe_read_csv(cleaned_csv_path, nrows=1)
+                    required_cols = ['month_number', 'year', 'value_fob_aud', 'gross_weight_tonnes']
+                    if all(col in sample_df.columns for col in required_cols):
+                        return cleaned_csv_path
+                except Exception:
+                    pass
+        except Exception as e:
+            st.info(f"Cloud Storage not available, using local files: {str(e)}")
+    
+    # Fallback to local CSV file
     if os.path.exists(cleaned_csv_path):
         file_age_days = (time.time() - os.path.getmtime(cleaned_csv_path)) / (60 * 60 * 24)
         if file_age_days <= 10:
