@@ -2254,8 +2254,8 @@ if file_path is not None and accurate_kpis is not None:
         # Port Value Visualizations (Interactive)
         st.subheader("Port Value Visualizations")
     
-        # 1. TOP 15 HIGH-VALUE PORTS (Interactive)
-        top_15_high_value = significant_ports.head(15)
+        # 1. TOP 10 HIGH-VALUE PORTS (Interactive)
+        top_10_high_value = significant_ports.head(10)
         # Create short form value labels for high-value ports
         def format_short_value(value):
             if value >= 1e6:
@@ -2265,13 +2265,13 @@ if file_path is not None and accurate_kpis is not None:
             else:
                 return f"${value:.0f}"
     
-        fig1 = px.bar(top_15_high_value, x='avg_value_per_shipment', y='port_of_loading',
+        fig1 = px.bar(top_10_high_value, x='avg_value_per_shipment', y='port_of_loading',
                       orientation='h',
-                      title='TOP 15 HIGH-VALUE PORTS (Average Value per Shipment)',
+                      title='TOP 10 HIGH-VALUE PORTS (Average Value per Shipment)',
                       labels={'avg_value_per_shipment': 'Average Value per Shipment ($)', 'port_of_loading': 'Port'},
                       color='avg_value_per_shipment',
                       color_continuous_scale='Greens',
-                      text=[format_short_value(value) for value in top_15_high_value['avg_value_per_shipment']])
+                      text=[format_short_value(value) for value in top_10_high_value['avg_value_per_shipment']])
         fig1.update_layout(
             title_font_size=16,
             title_font_color='#2c3e50',
@@ -2289,15 +2289,15 @@ if file_path is not None and accurate_kpis is not None:
         )
         st.plotly_chart(fig1)
     
-        # 2. LOWEST 15 VALUE PORTS (Interactive)
-        lowest_15_value = significant_ports.nsmallest(15, 'avg_value_per_shipment')
-        fig2 = px.bar(lowest_15_value, x='avg_value_per_shipment', y='port_of_loading',
+        # 2. LOWEST 10 VALUE PORTS (Interactive)
+        lowest_10_value = significant_ports.nsmallest(10, 'avg_value_per_shipment')
+        fig2 = px.bar(lowest_10_value, x='avg_value_per_shipment', y='port_of_loading',
                       orientation='h',
-                      title='LOWEST 15 VALUE PORTS (Potential Congestion Risk)',
+                      title='LOWEST 10 VALUE PORTS (Potential Congestion Risk)',
                       labels={'avg_value_per_shipment': 'Average Value per Shipment ($)', 'port_of_loading': 'Port'},
                       color='avg_value_per_shipment',
                       color_continuous_scale='Reds',
-                      text=[format_short_value(value) for value in lowest_15_value['avg_value_per_shipment']])
+                      text=[format_short_value(value) for value in lowest_10_value['avg_value_per_shipment']])
         fig2.update_layout(
             title_font_size=16,
             title_font_color='#2c3e50',
