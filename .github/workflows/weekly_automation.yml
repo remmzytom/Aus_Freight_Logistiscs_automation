@@ -1,0 +1,88 @@
+name: Weekly Freight Data Automation
+
+on:
+  schedule:
+    - cron: "0 9 * * 1"  # Every Monday at 9:00 AM UTC
+  workflow_dispatch:  # Allow manual runs
+
+jobs:
+  automate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+        cache: 'pip'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Set up Google Cloud credentials
+      continue-on-error: true
+      env:
+        GCS_CREDENTIALS: ${{ secrets.GCS_CREDENTIALS }}
+      run: |
+        if [ -n "$GCS_CREDENTIALS" ]; then
+          mkdir -p ~/.config/gcloud
+          echo "$GCS_CREDENTIALS" > ~/.config/gcloud/application_default_credentials.json
+          export GOOGLE_APPLICATION_CREDENTIALS=~/.config/gcloud/application_default_credentials.json
+          echo "✅ Google Cloud credentials configured"
+        else
+          echo "⚠️ GCS_CREDENTIALS secret not set - Cloud Storage upload will be skipped"
+        fi
+    
+    - name: Create data directory
+      run: |
+        mkdir -p data
+    
+    - name: Run complete automation pipeline
+      run: |
+        python simple_automation.py
+      env:
+        # Email notifications will work if these are set as GitHub Secrets
+        # Falls back to hardcoded values in simple_automation.py if not set
+        SMTP_SERVER: ${{ secrets.SMTP_SERVER }}
+        SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
+        SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }}
+        RECIPIENT_EMAILS: ${{ secrets.RECIPIENT_EMAILS }}
+    
+    - name: Upload logs on failure
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: automation-logs
+        path: |
+          automation.log
+          data_collection.log
+        retention-days: 7
+    
+    - name: Upload results
+      uses: actions/upload-artifact@v4
+      continue-on-error: true
+      with:
+        name: freight-data-results
+        path: data/
+        retention-days: 7
+    
+    - name: Upload notebooks
+      uses: actions/upload-artifact@v4
+      continue-on-error: true
+      with:
+        name: executed-notebooks
+        path: "*.nbconvert.ipynb"
+        if-no-files-found: ignore
+        retention-days: 7
+    
+    - name: Completion message
+      run: |
+        echo "✅ Automation completed successfully!"
+        echo "📊 Dashboard will automatically update with fresh data from Cloud Storage"
+        echo "🌐 Visit: https://aus-freight-dashboard-828544570472.us-central1.run.app"
