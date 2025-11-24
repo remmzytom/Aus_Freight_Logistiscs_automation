@@ -343,8 +343,8 @@ def ensure_data_file() -> str:
     if GCS_AVAILABLE:
         try:
             if download_from_cloud_storage(gcs_bucket_name, gcs_blob_name, cleaned_csv_path):
-                st.success("✅ Loaded latest data from Cloud Storage")
                 # Verify the downloaded file is valid
+                # Data loaded silently - no message needed
                 try:
                     sample_df = safe_read_csv(cleaned_csv_path, nrows=1)
                     required_cols = ['month_number', 'year', 'value_fob_aud', 'gross_weight_tonnes']
@@ -737,10 +737,8 @@ if st.session_state.data_file_path is None:
                 st.session_state.accurate_kpis = accurate_kpis
                 # Use accurate KPI count (computed from all chunks)
                 total_records = accurate_kpis.get('total_records', 0)
-                if total_records > 0:
-                    st.success(f"✅ Dataset ready: {total_records:,} records (lazy loading enabled)")
-                else:
-                    st.success("✅ Dataset ready (lazy loading enabled)")
+                # Show loading completed message
+                st.success("Loading completed")
             else:
                 st.error("Failed to initialize data")
                 st.stop()
@@ -2173,26 +2171,7 @@ if file_path is not None and accurate_kpis is not None:
     
         st.plotly_chart(fig)
     
-        # 6. CUSTOM ANALYSIS (from your notebook)
-        st.markdown('<h2 class="section-header">Custom Analysis</h2>', unsafe_allow_html=True)
-    
-        # Volume vs Value Analysis section removed as requested
-    
-        # Product Categories Analysis
-        st.subheader("Product Categories Analysis")
-    
-        # Calculate value per tonne for products
-        product_analysis = df_filtered.groupby('product_description').agg({
-            'value_fob_aud': 'sum',
-            'gross_weight_tonnes': 'sum'
-        }).reset_index()
-    
-        product_analysis['value_per_tonne'] = product_analysis['value_fob_aud'] / product_analysis['gross_weight_tonnes']
-        product_analysis = product_analysis.sort_values('value_per_tonne', ascending=False)
-    
-        # Clean presentation - visualizations show the data
-    
-        # 7. PORT ANALYSIS (from your notebook)
+        # 6. PORT ANALYSIS (from your notebook)
         st.markdown('<h2 class="section-header">Port Analysis</h2>', unsafe_allow_html=True)
     
         # Top 15 ports by tonnage
