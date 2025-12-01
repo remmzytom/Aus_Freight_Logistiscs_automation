@@ -2171,7 +2171,26 @@ if file_path is not None and accurate_kpis is not None:
     
         st.plotly_chart(fig)
     
-        # 6. PORT ANALYSIS (from your notebook)
+        # 6. CUSTOM ANALYSIS (from your notebook)
+        st.markdown('<h2 class="section-header">Custom Analysis</h2>', unsafe_allow_html=True)
+    
+        # Volume vs Value Analysis section removed as requested
+    
+        # Product Categories Analysis
+        st.subheader("Product Categories Analysis")
+    
+        # Calculate value per tonne for products
+        product_analysis = df_filtered.groupby('product_description').agg({
+            'value_fob_aud': 'sum',
+            'gross_weight_tonnes': 'sum'
+        }).reset_index()
+    
+        product_analysis['value_per_tonne'] = product_analysis['value_fob_aud'] / product_analysis['gross_weight_tonnes']
+        product_analysis = product_analysis.sort_values('value_per_tonne', ascending=False)
+    
+        # Clean presentation - visualizations show the data
+    
+        # 7. PORT ANALYSIS (from your notebook)
         st.markdown('<h2 class="section-header">Port Analysis</h2>', unsafe_allow_html=True)
     
         # Top 15 ports by tonnage
