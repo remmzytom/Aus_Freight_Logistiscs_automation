@@ -2,7 +2,7 @@ name: Weekly Freight Data Automation
 
 on:
   schedule:
-    - cron: "0 9 * * 1"  # Every Monday at 9:00 AM UTC
+    - cron: "0 22 * * 0"  # Every Monday at 9:00 AM Sydney time (AEDT UTC+11) = Sunday 10 PM UTC
   workflow_dispatch:  # Allow manual runs
 
 jobs:
@@ -34,9 +34,9 @@ jobs:
           mkdir -p ~/.config/gcloud
           echo "$GCS_CREDENTIALS" > ~/.config/gcloud/application_default_credentials.json
           export GOOGLE_APPLICATION_CREDENTIALS=~/.config/gcloud/application_default_credentials.json
-          echo "✅ Google Cloud credentials configured"
+          echo "Google Cloud credentials configured"
         else
-          echo "⚠️ GCS_CREDENTIALS secret not set - Cloud Storage upload will be skipped"
+          echo "GCS_CREDENTIALS secret not set - Cloud Storage upload will be skipped"
         fi
     
     - name: Create data directory
@@ -83,6 +83,6 @@ jobs:
     
     - name: Completion message
       run: |
-        echo "✅ Automation completed successfully!"
-        echo "📊 Dashboard will automatically update with fresh data from Cloud Storage"
-        echo "🌐 Visit: https://aus-freight-dashboard-828544570472.us-central1.run.app"
+        echo " Automation completed successfully!"
+        echo " Dashboard will automatically update with fresh data from Cloud Storage"
+        echo " Visit: https://aus-freight-dashboard-828544570472.us-central1.run.app"
