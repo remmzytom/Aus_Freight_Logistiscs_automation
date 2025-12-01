@@ -2,7 +2,7 @@ name: Weekly Freight Data Automation
 
 on:
   schedule:
-    - cron: "30 3 * * 1"  # TEST: Monday at 2:30 PM Sydney time (AEDT UTC+11) = Monday 3:30 AM UTC
+    - cron: "40 3 * * 1"  # TEST: Monday at 2:40 PM Sydney time (AEDT UTC+11) = Monday 3:40 AM UTC
   workflow_dispatch:  # Allow manual runs
 
 jobs:
